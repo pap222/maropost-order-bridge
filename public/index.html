@@ -155,16 +155,76 @@ async function loadOrders(){
     const data = await api("/api/orders");
     if (data.error){ $("#orders").innerHTML = "<p class='msg err'>"+data.error+"</p>"; return; }
     if (!data.orders.length){ $("#orders").innerHTML = "<p>No paid Website orders waiting. 🎉</p>"; return; }
+    data.orders.forEach(o => { ORDERS[o.order_id] = o; });
     $("#orders").innerHTML = data.orders.map(renderCard).join("");
     log(`Loaded ${data.orders.length} orders`);
   } catch(e){ if(e.message!=="unauthorized") $("#orders").innerHTML="<p class='msg err'>"+e.message+"</p>"; }
 }
 
-// Maropost invoice printout. We pass the order id so the correct invoice loads
-// (the printout page itself shows no order in the address bar). If the invoice
-// opens blank/wrong, the id parameter name below is what needs adjusting.
-const INVOICE_URL = id => `https://www.waggafruitsupply.com.au/_cpanel/order/printout?type=tax_invoice&id=${encodeURIComponent(id)}`;
-function openInvoice(orderId){ window.open(INVOICE_URL(orderId), "wfs_invoice_"+orderId); }
+// Maropost's invoice printout can't be deep-linked (it's a session/POST page),
+// so we generate a clean print-ready invoice from the order data and auto-print
+// it. Orders are cached here by id when the list loads.
+const ORDERS = {};
+const money = n => "$" + (Number(n)||0).toFixed(2);
+
+function invoiceHTML(o){
+  const c = o.customer || {};
+  const isPickup = /pick\s*-?\s*up/i.test(o.shipping||"");
+  const rows = o.lines.map(l=>`
+    <tr><td class="r">${l.ordered_qty}</td><td>${esc(l.product_name||l.sku)}</td>
+    <td class="r">${money(l.unit_price)}</td><td class="r">${money(l.line_total)}</td></tr>`).join("");
+  // Lines may not sum to the order total (freight/surcharge isn't a line item),
+  // so reconcile with a subtotal + "Other" row and show Maropost's total.
+  const subtotal = o.lines.reduce((s,l)=>s+(Number(l.line_total)||0),0);
+  const other = Number(((o.grand_total||0) - subtotal).toFixed(2));
+  const foot = `
+    <tr><td colspan="3" class="r">Subtotal</td><td class="r">${money(subtotal)}</td></tr>
+    ${Math.abs(other)>=0.01?`<tr><td colspan="3" class="r">Freight / other</td><td class="r">${money(other)}</td></tr>`:''}
+    <tr class="tot"><td colspan="3" class="r">TOTAL</td><td class="r">${money(o.grand_total)}</td></tr>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Invoice ${esc(o.order_id)}</title>
+  <style>
+    *{font-family:Arial,Helvetica,sans-serif;box-sizing:border-box;}
+    body{margin:24px;color:#111;}
+    h1{margin:0;font-size:26px;} .tax{font-size:20px;color:#444;margin:2px 0 14px;}
+    .top{display:flex;justify-content:space-between;align-items:flex-start;}
+    .meta{text-align:right;font-size:13px;line-height:1.5;}
+    .mode{display:inline-block;margin:6px 0 10px;padding:5px 12px;border:2px solid #111;border-radius:4px;font-weight:bold;font-size:15px;}
+    .who{margin:6px 0 12px;font-size:13px;line-height:1.5;} .who b{font-size:15px;}
+    table{width:100%;border-collapse:collapse;margin-top:6px;font-size:13px;}
+    th,td{padding:7px 8px;border-bottom:1px solid #ddd;text-align:left;} th{background:#f3f3f3;}
+    .r{text-align:right;}
+    tfoot td{border-bottom:none;} tfoot .tot td{font-weight:bold;font-size:16px;border-top:2px solid #111;}
+    .note{margin-top:18px;font-size:12px;color:#666;}
+    @media print{body{margin:0;}}
+  </style></head><body>
+    <div class="top">
+      <div><h1>Wagga Fruit Supply</h1><div class="tax">Tax Invoice</div></div>
+      <div class="meta"><div><b>Invoice #${esc(o.order_id)}</b></div>
+        ${o.placed_date?`<div>Ordered: ${esc(o.placed_date)}</div>`:''}
+      </div>
+    </div>
+    <div class="mode">${isPickup?'PICK UP':'DELIVERY'}${o.required_date?` &mdash; ${esc(o.required_date)}`:''}</div>
+    <div class="who"><b>${esc(c.name||'')}</b><br>
+      ${c.company&&c.company!==c.name?esc(c.company)+'<br>':''}
+      ${!isPickup&&c.address?esc(c.address)+'<br>':''}
+      ${c.phone?esc(c.phone)+'<br>':''}${c.email?esc(c.email):''}</div>
+    <table>
+      <thead><tr><th class="r">Qty</th><th>Item</th><th class="r">Unit</th><th class="r">Total</th></tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot>${foot}</tfoot>
+    </table>
+    <div class="note">Web order #${esc(o.order_id)} &middot; printed for packing/dispatch.</div>
+  </body></html>`;
+}
+
+function openInvoice(orderId){
+  const o = ORDERS[orderId];
+  if(!o){ alert("Reload the page, then try Invoice again."); return; }
+  const w = window.open("", "wfs_invoice_"+orderId);
+  if(!w){ alert("Pop-up blocked — allow pop-ups for this site to print invoices."); return; }
+  w.document.open(); w.document.write(invoiceHTML(o)); w.document.close(); w.focus();
+  setTimeout(()=>{ try{ w.print(); }catch(e){} }, 350);
+}
 
 function renderCard(o){
   const rows = o.lines.map((l,i)=>`
