@@ -125,7 +125,7 @@ async function loadOrders(){
 function renderCard(o){
   const rows = o.lines.map((l,i)=>`
     <tr class="${l.mapped?'':'unmapped'}" data-sku="${esc(l.sku)}">
-      <td><b>${esc(l.sku)}</b><br><small class="note">${esc(l.product_name||'')}</small></td>
+      <td><b>${esc(l.product_name||l.sku)}</b></td>
       <td>${l.ordered_qty}</td>
       <td><input class="code" value="${esc(l.qb_code)}" placeholder="QB code" /></td>
       <td><input class="factor" type="number" step="0.001" value="${l.factor}" /></td>
@@ -140,7 +140,7 @@ function renderCard(o){
     </h2>
     <div class="cust"><b>${esc(c.name)}</b> &nbsp; ${esc(c.phone||'')} &nbsp; ${esc(c.address||'')} &nbsp; <span class="note">${esc(c.email||'')}</span></div>
     <table>
-      <thead><tr><th>Maropost SKU</th><th>Ordered</th><th>QuickB2B code</th><th>× factor</th><th>= qty</th><th></th></tr></thead>
+      <thead><tr><th>Product</th><th>Ordered</th><th>QuickB2B code</th><th>× factor</th><th>= qty</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
     <div class="actions">
