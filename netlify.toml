@@ -1,0 +1,30 @@
+[build]
+  publish = "public"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+# Friendly /api/* URLs -> the serverless functions.
+[[redirects]]
+  from = "/api/orders"
+  to = "/.netlify/functions/orders"
+  status = 200
+
+[[redirects]]
+  from = "/api/save-mapping"
+  to = "/.netlify/functions/save-mapping"
+  status = 200
+
+[[redirects]]
+  from = "/api/push-order"
+  to = "/.netlify/functions/push-order"
+  status = 200
+
+[[redirects]]
+  from = "/api/settings"
+  to = "/.netlify/functions/settings"
+  status = 200
+
+# The scheduled cron (maropost-to-quickb2b) is declared in-code via
+# `export const config = { schedule }` and no-ops unless AUTO_MODE=1.

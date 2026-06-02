@@ -1,0 +1,7 @@
+{
+  "name": "wagga-maropost-to-quickb2b",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Polling bridge: paid Maropost (Neto) home orders -> QuickB2B packing dockets."
+}
