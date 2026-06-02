@@ -29,7 +29,22 @@ createServer(async (req, res) => {
     }
 
     const fn = ROUTES[url.pathname];
-    if (!fn) { res.writeHead(404); res.end("Not found"); return; }
+    if (!fn) {
+      // Fall back to serving static files from public/ (e.g. qb2b-items.json),
+      // mirroring how Netlify serves the publish dir.
+      if (/^\/[\w.-]+$/.test(url.pathname)) {
+        try {
+          const buf = await readFile(new URL("./public" + url.pathname, import.meta.url));
+          const type = url.pathname.endsWith(".json") ? "application/json"
+            : url.pathname.endsWith(".js") ? "text/javascript"
+            : url.pathname.endsWith(".css") ? "text/css" : "application/octet-stream";
+          res.writeHead(200, { "Content-Type": type });
+          res.end(buf);
+          return;
+        } catch { /* fall through to 404 */ }
+      }
+      res.writeHead(404); res.end("Not found"); return;
+    }
 
     const chunks = [];
     for await (const ch of req) chunks.push(ch);
