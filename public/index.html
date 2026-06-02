@@ -16,6 +16,7 @@
   button.primary { background:#fff; color:var(--green); }
   button.push { background:var(--green); color:#fff; }
   button.pushall { background:#1565c0; color:#fff; }
+  button.saveall { background:#607d8b; color:#fff; }
   button:disabled { opacity:.5; cursor:not-allowed; }
   main { padding:20px; max-width:1100px; margin:0 auto; }
   .card { background:#fff; border:1px solid var(--line); border-radius:10px; margin-bottom:18px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.06); }
@@ -182,28 +183,50 @@ function renderCard(o){
       <tbody>${rows}</tbody>
     </table>
     <div class="actions">
+      <button class="saveall" onclick="saveAll('${esc(o.order_id)}', this)">Save all mappings</button>
       <button class="push" onclick="pushOne('${esc(o.order_id)}', this)" ${o.synced?'disabled':''}>Confirm & Push</button>
       <span class="msg"></span>
     </div>
   </div>`;
 }
 
-async function saveMap(btn){
-  const tr = btn.closest("tr"); const card = btn.closest(".card");
+// Save one row's mapping. In batch mode it skips the per-row confirm popup.
+async function saveRow(tr, { batch=false } = {}){
   const sku = tr.dataset.sku;
   const code = codeFromPick($(".qbpick",tr).value);
   const factor = parseFloat($(".factor",tr).value)||1;
-  const msg = $(".msg",btn.parentElement);
-  if(!code){ msg.textContent="pick an item"; msg.className="msg err"; return; }
-  if(!QBNAME(code) && !confirm(`"${code}" isn't in the QuickB2B catalogue.\nSave it anyway?`)){ return; }
-  msg.textContent="…";
+  const msg = tr.querySelector(".msg");
+  if(!code){ if(msg){ msg.textContent="pick an item"; msg.className="msg err"; } return { ok:false, empty:true }; }
+  if(!batch && !QBNAME(code) && !confirm(`"${code}" isn't in the QuickB2B catalogue.\nSave it anyway?`)){ return { ok:false, skipped:true }; }
+  if(msg){ msg.textContent="…"; msg.className="msg"; }
   try{
     const r = await api("/api/save-mapping",{ method:"POST", body: JSON.stringify({ maropost_sku:sku, qb2b_item_code:code, qty_factor:factor }) });
-    if(r.ok){ msg.textContent="saved"; msg.className="msg ok"; tr.classList.remove("unmapped");
+    if(r.ok){
+      if(msg){ msg.textContent="saved"; msg.className="msg ok"; }
+      tr.classList.remove("unmapped");
       $(".out",tr).textContent = +( (parseFloat(tr.children[1].textContent)||1)*factor ).toFixed(3);
       log(`Saved ${sku} → ${code} ×${factor}`);
-    } else { msg.textContent=r.error||"error"; msg.className="msg err"; }
-  }catch(e){ if(e.message!=="unauthorized"){ msg.textContent=e.message; msg.className="msg err"; } }
+      return { ok:true };
+    } else { if(msg){ msg.textContent=r.error||"error"; msg.className="msg err"; } return { ok:false, error:r.error }; }
+  }catch(e){ if(e.message!=="unauthorized" && msg){ msg.textContent=e.message; msg.className="msg err"; } return { ok:false, error:e.message }; }
+}
+
+async function saveMap(btn){ await saveRow(btn.closest("tr")); }
+
+async function saveAll(orderId, btn){
+  const card = btn.closest(".card");
+  const rows = [...card.querySelectorAll("tbody tr")];
+  const msg = $(".msg", btn.parentElement);
+  msg.textContent="saving all…"; msg.className="msg"; btn.disabled=true;
+  let ok=0, fail=0;
+  for(const tr of rows){
+    const r = await saveRow(tr, { batch:true });
+    if(r.ok) ok++; else if(!r.empty) fail++;
+  }
+  msg.textContent = `saved ${ok}${fail?`, ${fail} failed`:""}`;
+  msg.className = fail ? "msg err" : "msg ok";
+  btn.disabled=false;
+  log(`#${orderId} Save all → ${ok} saved${fail?`, ${fail} failed`:""}`);
 }
 
 async function pushOne(orderId, btn){
