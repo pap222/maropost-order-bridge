@@ -167,53 +167,112 @@ async function loadOrders(){
 const ORDERS = {};
 const money = n => "$" + (Number(n)||0).toFixed(2);
 
+// Render an address block ({name, company, phone, lines[]}) to HTML, falling
+// back to the order's customer info when the structured block is empty.
+function addrHTML(b, fallback){
+  b = b || {};
+  const parts = [];
+  const name = b.name || (fallback && fallback.name) || "";
+  if(name) parts.push(`<b>${esc(name)}</b>`);
+  if(b.company && b.company!==name) parts.push(esc(b.company));
+  (b.lines||[]).forEach(l=>{ if(l) parts.push(esc(l)); });
+  if(b.phone) parts.push("Ph: "+esc(b.phone));
+  if(fallback && fallback.email) parts.push(esc(fallback.email));
+  return parts.length ? parts.join("<br>") : '<span class="muted">—</span>';
+}
+
 function invoiceHTML(o){
   const c = o.customer || {};
   const isPickup = /pick\s*-?\s*up/i.test(o.shipping||"");
   const rows = o.lines.map(l=>`
     <tr><td class="r">${l.ordered_qty}</td><td>${esc(l.product_name||l.sku)}</td>
-    <td class="r">${money(l.unit_price)}</td><td class="r">${money(l.line_total)}</td></tr>`).join("");
-  // Lines may not sum to the order total (freight/surcharge isn't a line item),
-  // so reconcile with a subtotal + "Other" row and show Maropost's total.
-  const subtotal = o.lines.reduce((s,l)=>s+(Number(l.line_total)||0),0);
-  const other = Number(((o.grand_total||0) - subtotal).toFixed(2));
-  const foot = `
-    <tr><td colspan="3" class="r">Subtotal</td><td class="r">${money(subtotal)}</td></tr>
-    ${Math.abs(other)>=0.01?`<tr><td colspan="3" class="r">Freight / other</td><td class="r">${money(other)}</td></tr>`:''}
-    <tr class="tot"><td colspan="3" class="r">TOTAL</td><td class="r">${money(o.grand_total)}</td></tr>`;
+    <td class="r">${money(l.unit_price)}</td><td class="r">0.00%</td><td class="r">${money(l.line_total)}</td></tr>`).join("");
+
+  // Totals breakdown mirrors Maropost's Tax Invoice: product subtotal, shipping,
+  // 2.2% card surcharge, GST (already included in the prices), grand total, then
+  // amount paid / balance due.
+  const surchargeLabel = (o.surcharge_total>0 && o.product_subtotal>0)
+    ? `Surcharge (${(o.surcharge_total/(o.product_subtotal+(o.shipping_total||0))*100).toFixed(2)}%)`
+    : "Surcharge";
+  const totalRow = (label, val, cls="") =>
+    `<tr class="${cls}"><td colspan="4" class="r">${label}</td><td class="r">${money(val)}</td></tr>`;
+  const foot = [
+    totalRow("Product Subtotal", o.product_subtotal),
+    (o.shipping_total>0) ? totalRow(esc(o.shipping||"Shipping"), o.shipping_total) : "",
+    (o.surcharge_total>0) ? totalRow(surchargeLabel, o.surcharge_total) : "",
+    totalRow(`GST (included)`, o.gst),
+    totalRow("Grand Total", o.grand_total, "tot"),
+    totalRow("Amount Paid", o.amount_paid),
+    totalRow("Balance Due", o.balance_due, o.balance_due>0.001?"due":""),
+  ].join("");
+
+  const payRows = (o.payments||[]).map(p=>`
+    <tr><td>${esc(p.date||'')}</td><td>${esc(p.method||'')}</td><td class="r">${money(p.amount)}</td></tr>`).join("");
+
   return `<!doctype html><html><head><meta charset="utf-8"><title>Invoice ${esc(o.order_id)}</title>
   <style>
     *{font-family:Arial,Helvetica,sans-serif;box-sizing:border-box;}
-    body{margin:24px;color:#111;}
-    h1{margin:0;font-size:26px;} .tax{font-size:20px;color:#444;margin:2px 0 14px;}
-    .top{display:flex;justify-content:space-between;align-items:flex-start;}
-    .meta{text-align:right;font-size:13px;line-height:1.5;}
-    .mode{display:inline-block;margin:6px 0 10px;padding:5px 12px;border:2px solid #111;border-radius:4px;font-weight:bold;font-size:15px;}
-    .who{margin:6px 0 12px;font-size:13px;line-height:1.5;} .who b{font-size:15px;}
-    table{width:100%;border-collapse:collapse;margin-top:6px;font-size:13px;}
+    body{margin:24px;color:#111;font-size:13px;}
+    h1{margin:0;font-size:24px;} .tax{font-size:18px;color:#444;margin:2px 0;}
+    .abn{font-size:12px;color:#666;}
+    .top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:12px;}
+    .meta{text-align:right;line-height:1.6;}
+    .meta .inv{font-size:16px;font-weight:bold;}
+    .paid{display:inline-block;margin-top:4px;padding:3px 10px;border-radius:4px;font-weight:bold;font-size:12px;}
+    .paid.yes{background:#1b8a3a;color:#fff;} .paid.no{background:#c62828;color:#fff;}
+    .mode{display:inline-block;margin:14px 0 4px;padding:5px 12px;border:2px solid #111;border-radius:4px;font-weight:bold;font-size:15px;}
+    .cols{display:flex;gap:24px;margin:12px 0;}
+    .col{flex:1;} .col h3{margin:0 0 4px;font-size:12px;text-transform:uppercase;color:#666;letter-spacing:.5px;}
+    .col .body{line-height:1.5;}
+    .instr{margin:8px 0 14px;padding:8px 12px;background:#fff8e1;border:1px solid #ffe082;border-radius:4px;}
+    .instr b{display:block;font-size:11px;text-transform:uppercase;color:#8a6d00;margin-bottom:2px;}
+    table{width:100%;border-collapse:collapse;margin-top:6px;}
     th,td{padding:7px 8px;border-bottom:1px solid #ddd;text-align:left;} th{background:#f3f3f3;}
-    .r{text-align:right;}
-    tfoot td{border-bottom:none;} tfoot .tot td{font-weight:bold;font-size:16px;border-top:2px solid #111;}
-    .note{margin-top:18px;font-size:12px;color:#666;}
+    .r{text-align:right;} .muted{color:#999;}
+    tfoot td{border-bottom:none;padding:4px 8px;}
+    tfoot .tot td{font-weight:bold;font-size:15px;border-top:2px solid #111;padding-top:8px;}
+    tfoot .due td{font-weight:bold;color:#c62828;}
+    .pay{margin-top:18px;} .pay h3{margin:0 0 4px;font-size:12px;text-transform:uppercase;color:#666;}
+    .pay table{font-size:12px;} .pay td,.pay th{padding:5px 8px;}
+    .foot{margin-top:18px;font-size:11px;color:#888;}
     @media print{body{margin:0;}}
   </style></head><body>
     <div class="top">
-      <div><h1>Wagga Fruit Supply</h1><div class="tax">Tax Invoice</div></div>
-      <div class="meta"><div><b>Invoice #${esc(o.order_id)}</b></div>
-        ${o.placed_date?`<div>Ordered: ${esc(o.placed_date)}</div>`:''}
+      <div>
+        <h1>${esc(o.business?.name||'Wagga Fruit Supply')}</h1>
+        <div class="tax">Tax Invoice</div>
+        ${o.business?.abn?`<div class="abn">ABN ${esc(o.business.abn)}</div>`:''}
+      </div>
+      <div class="meta">
+        <div class="inv">Invoice #${esc(o.order_id)}</div>
+        ${o.date_placed?`<div>Date placed: ${esc(o.date_placed)}</div>`:''}
+        ${o.date_invoiced?`<div>Date invoiced: ${esc(o.date_invoiced)}</div>`:''}
+        <div><span class="paid ${o.paid?'yes':'no'}">${o.paid?'PAID':'UNPAID'}</span></div>
       </div>
     </div>
+
     <div class="mode">${isPickup?'PICK UP':'DELIVERY'}${o.required_date?` &mdash; ${esc(o.required_date)}`:''}</div>
-    <div class="who"><b>${esc(c.name||'')}</b><br>
-      ${c.company&&c.company!==c.name?esc(c.company)+'<br>':''}
-      ${!isPickup&&c.address?esc(c.address)+'<br>':''}
-      ${c.phone?esc(c.phone)+'<br>':''}${c.email?esc(c.email):''}</div>
+
+    <div class="cols">
+      <div class="col"><h3>${isPickup?'Customer (Pick Up)':'Ship To'}</h3>
+        <div class="body">${isPickup?'<b>PICK UP</b><br>'+addrHTML({name:o.ship_to?.name,company:o.ship_to?.company,phone:o.ship_to?.phone},c):addrHTML(o.ship_to,c)}</div></div>
+      <div class="col"><h3>Billed To</h3>
+        <div class="body">${addrHTML(o.bill_to,c)}</div></div>
+    </div>
+
+    ${o.instructions?`<div class="instr"><b>Delivery instructions</b>${esc(o.instructions)}</div>`:''}
+
     <table>
-      <thead><tr><th class="r">Qty</th><th>Item</th><th class="r">Unit</th><th class="r">Total</th></tr></thead>
+      <thead><tr><th class="r">Qty</th><th>Item</th><th class="r">Unit Price</th><th class="r">Tax</th><th class="r">Subtotal</th></tr></thead>
       <tbody>${rows}</tbody>
       <tfoot>${foot}</tfoot>
     </table>
-    <div class="note">Web order #${esc(o.order_id)} &middot; printed for packing/dispatch.</div>
+
+    ${payRows?`<div class="pay"><h3>Payments</h3>
+      <table><thead><tr><th>Date</th><th>Method</th><th class="r">Amount</th></tr></thead>
+      <tbody>${payRows}</tbody></table></div>`:''}
+
+    <div class="foot">Web order #${esc(o.order_id)} &middot; printed for packing/dispatch. Prices include GST where applicable.</div>
   </body></html>`;
 }
 

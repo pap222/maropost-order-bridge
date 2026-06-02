@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "review",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["--env-file=.env", "local_server.mjs"],
+      "port": 8910
+    }
+  ]
+}
