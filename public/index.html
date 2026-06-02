@@ -36,6 +36,7 @@
   .badge { font-size:11px; font-weight:700; padding:2px 8px; border-radius:20px; }
   .badge.synced { background:#e8f5e9; color:var(--green); }
   .badge.unmapped { background:#fff3e0; color:var(--amber); }
+  .badge.date { background:#e3f2fd; color:#1565c0; font-size:13px; }
   .actions { padding:12px 16px; display:flex; gap:10px; align-items:center; }
   .save { background:#eee; color:#333; padding:5px 10px; font-size:12px; }
   .msg { font-size:13px; }
@@ -174,10 +175,11 @@ function renderCard(o){
   const c=o.customer;
   return `<div class="card" data-order="${esc(o.order_id)}">
     <h2>#${esc(o.order_id)}
+      ${o.required_date?`<span class="badge date">📅 wants ${esc(o.required_date)}</span>`:''}
       ${o.synced?'<span class="badge synced">already pushed</span>':''}
       ${o.unmapped_count?`<span class="badge unmapped">${o.unmapped_count} unmapped</span>`:''}
     </h2>
-    <div class="cust"><b>${esc(c.name)}</b> &nbsp; ${esc(c.phone||'')} &nbsp; ${esc(c.address||'')} &nbsp; <span class="note">${esc(c.email||'')}</span></div>
+    <div class="cust"><b>${esc(c.name)}</b> &nbsp; ${esc(c.phone||'')} &nbsp; ${esc(c.address||'')} ${c.email&&c.email!==c.name?`&nbsp; <span class="note">${esc(c.email)}</span>`:''}${o.shipping?` &nbsp;·&nbsp; <b>${esc(o.shipping)}</b>`:''}</div>
     <table>
       <thead><tr><th>Product</th><th>Ordered</th><th>QuickB2B item</th><th>× factor</th><th>= qty</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
