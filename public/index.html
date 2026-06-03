@@ -28,10 +28,10 @@
   input.search { padding:8px 10px; border-radius:6px; border:none; font-size:14px; width:190px; }
   /* collapsible cards */
   .card.collapsed .cbody { display:none; }
-  /* Actions bar stays visible while collapsed; hide the buttons that only
-     make sense once the card is expanded (mapping table / dispatch step). */
-  .card.collapsed .actions .saveall,
-  .card.collapsed .actions .ready { display:none; }
+  /* Actions bar stays visible while collapsed; only hide "Save all mappings",
+     which needs the mapping table open. Push / Refund / Invoice / Mark ready
+     all stay clickable on the squished card. */
+  .card.collapsed .actions .saveall { display:none; }
   .card h2 { cursor:pointer; user-select:none; }
   .card h2 .chev { margin-left:auto; font-size:13px; color:#888; transition:transform .15s; }
   .card.collapsed h2 .chev { transform:rotate(-90deg); }
