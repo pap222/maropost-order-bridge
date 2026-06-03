@@ -382,6 +382,7 @@ function invoiceHTML(o){
     .paid.yes{background:#1b8a3a;color:#fff;} .paid.no{background:#c62828;color:#fff;}
     .mode{display:inline-block;margin:14px 0 4px;padding:5px 12px;border:2px solid #111;border-radius:4px;font-weight:bold;font-size:15px;}
     .refbanner{margin:10px 0;padding:8px 14px;border-radius:6px;font-weight:bold;font-size:14px;background:#fdecea;color:#b71c1c;border:1px solid #f5b5b0;}
+    .reftiming{margin-top:6px;font-weight:normal;font-size:12px;color:#7a4a00;}
     .cols{display:flex;gap:24px;margin:12px 0;}
     .col{flex:1;} .col h3{margin:0 0 4px;font-size:12px;text-transform:uppercase;color:#666;letter-spacing:.5px;}
     .col .body{line-height:1.5;}
@@ -418,7 +419,8 @@ function invoiceHTML(o){
 
     ${refund>0?`<div class="refbanner">${rf
         ? `↩ REFUND ISSUED — ${money(rf.this_refund||refund)} returned for unavailable items${rf.stripe_refund_id?` · Stripe ${esc(rf.stripe_refund_id)}`:''}`
-        : `↩ REVISED — ${money(refund)} to be refunded for unavailable items`}</div>`:''}
+        : `↩ REVISED — ${money(refund)} to be refunded for unavailable items`}`
+      + `<div class="reftiming">💳 Please allow <b>5–10 business days</b> for the refund to appear in your account (depends on your bank/card provider).</div></div>`:''}
 
     <div class="cols">
       <div class="col"><h3>${isPickup?'Customer (Pick Up)':'Ship To'}</h3>
@@ -767,6 +769,7 @@ function refundDocketHTML(d){
       th{font-size:11px;text-transform:uppercase;color:#888;}
       .r{text-align:right;} tfoot td{font-weight:700;border-top:2px solid #333;font-size:15px;}
       .who{margin-top:14px;font-size:13px;} .note{margin-top:8px;font-size:11px;color:#777;}
+      .refnote{margin-top:16px;padding:10px 14px;background:#e8f5e9;border:1px solid #a5d6a7;border-radius:6px;font-size:13px;color:#1b5e20;}
       .badge{display:inline-block;background:#c62828;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;}
     </style></head><body>
     <div class="head">
@@ -784,7 +787,8 @@ function refundDocketHTML(d){
         ${Number(d.total_refunded)>Number(d.this_refund)?`<tr><td colspan="3" class="r">Total refunded on this order</td><td class="r">${money(d.total_refunded)}</td></tr>`:''}
       </tfoot>
     </table>
-    <div class="note">Refund processed via Stripe to the original payment method. Prices include GST where applicable.</div>
+    <div class="refnote">💳 Your refund has been processed to the original payment method. Please allow <b>5–10 business days</b> for it to appear in your account (timing depends on your bank/card provider).</div>
+    <div class="note">Refunded via Stripe. Prices include GST where applicable.</div>
   </body></html>`;
 }
 
