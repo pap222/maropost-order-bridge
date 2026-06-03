@@ -36,6 +36,16 @@
   .card h2 .chev { margin-left:auto; font-size:13px; color:#888; transition:transform .15s; }
   .card.collapsed h2 .chev { transform:rotate(-90deg); }
   .summary { font-size:12px; color:#777; font-weight:400; }
+  /* Standout customer name + colour-coded pickup vs delivery */
+  .card h2 .ordno { font-size:13px; color:#9aa0a6; font-weight:700; }
+  .card h2 .cname { font-size:20px; font-weight:800; color:#0d0d0d; letter-spacing:.2px; }
+  .modepill { font-size:12px; font-weight:800; padding:3px 11px; border-radius:999px; text-transform:uppercase; letter-spacing:.05em; white-space:nowrap; }
+  .card.pickup   { border-left:6px solid #00897b; }
+  .card.delivery { border-left:6px solid #ef6c00; }
+  .card.pickup   h2 { background:#effaf8; }
+  .card.delivery h2 { background:#fff7ef; }
+  .card.pickup   .modepill { background:#b2dfdb; color:#00564e; }
+  .card.delivery .modepill { background:#ffe0b2; color:#b34700; }
   .instr { margin:0; padding:8px 16px; background:#fff8e1; color:#8a6d00; font-size:12px; border-bottom:1px solid var(--line); }
   main { padding:20px; max-width:1100px; margin:0 auto; }
   .card { background:#fff; border:1px solid var(--line); border-radius:10px; margin-bottom:18px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.06); }
@@ -427,10 +437,15 @@ function renderCard(o){
     </tr>`).join("");
   const c=o.customer;
   const needsMap = o.unmapped_count>0;
-  const summary = `${esc(c.name)}${o.shipping?` · ${esc(o.shipping)}`:''} · ${money(o.grand_total||0)}`;
+  const pickup = isPickupShip(o.shipping);
+  const modePill = pickup ? '🏪 Pickup' : '🚚 Delivery';
+  const summary = `${o.shipping?`${esc(o.shipping)} · `:''}${money(o.grand_total||0)}`;
   // Cards start collapsed ("squished") - click the header to expand & check.
-  return `<div class="card collapsed" data-order="${esc(o.order_id)}">
-    <h2 onclick="toggleCard(this)">#${esc(o.order_id)}
+  return `<div class="card collapsed ${pickup?'pickup':'delivery'}" data-order="${esc(o.order_id)}">
+    <h2 onclick="toggleCard(this)">
+      <span class="ordno">#${esc(o.order_id)}</span>
+      <span class="modepill">${modePill}</span>
+      <span class="cname">${esc(c.name)}</span>
       ${o.required_date?`<span class="badge date">📅 ${esc(o.required_date)}</span>`:''}
       ${o.synced?'<span class="badge synced">pushed</span>':''}
       ${needsMap?`<span class="badge unmapped">${o.unmapped_count} unmapped</span>`:''}
