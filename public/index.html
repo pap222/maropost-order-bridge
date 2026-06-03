@@ -563,10 +563,10 @@ function labelHTML(o){
   const addr = addrLines.join("<br>") || '<span style="color:#999">address on file</span>';
   return `<!doctype html><html><head><meta charset="utf-8"><title>Label ${esc(o.order_id)}</title>
   <style>
-    @page{margin:8mm;}
+    @page{size:100mm 70mm;margin:3mm;}
     *{font-family:Arial,Helvetica,sans-serif;box-sizing:border-box;}
     body{margin:0;color:#111;}
-    .lab{border:3px solid #111;border-radius:12px;padding:20px 24px;max-width:560px;}
+    .lab{border:2px solid #111;border-radius:6px;padding:8px 10px;width:94mm;}
     .ord{float:right;font-size:15px;color:#555;font-weight:700;}
     .mode{display:inline-block;font-size:26px;font-weight:900;letter-spacing:1px;padding:6px 18px;border-radius:8px;color:#fff;}
     .mode.pickup{background:#00897b;} .mode.delivery{background:#ef6c00;}
@@ -589,9 +589,83 @@ function labelHTML(o){
     </div>
   </body></html>`;
 }
-function openLabel(orderId){
+// --- Zebra label (ZPL via Zebra Browser Print) ----------------------------
+// The roll is 100 x 70 mm. Desktop Zebras are usually 203 dpi (8 dots/mm), so
+// 100mm = 800 dots wide and 70mm = 560 dots tall. If labels print too small or
+// too large for the media, change LABEL_DPMM (a 300 dpi printer uses 11.8).
+const LABEL_DPMM = 8;
+const LABEL_W = Math.round(100 * LABEL_DPMM); // dots across (800 @ 203dpi)
+const LABEL_H = Math.round(70  * LABEL_DPMM); // dots down   (560 @ 203dpi)
+
+// Customer text can contain ^ or ~ which are ZPL control chars — strip them so
+// a name/address can never break the label format.
+function zplEsc(s){ return String(s==null?"":s).replace(/[\^~]/g," ").replace(/\s+/g," ").trim(); }
+
+// Build the ZPL for one order's label. Pickup = name + "PICK UP" (no address);
+// delivery = name + address. Both show phone, required date and instructions.
+function zplLabel(o){
+  const c=o.customer||{}, st=o.ship_to||{};
+  const pickup=isPickupShip(o.shipping);
+  const name=zplEsc(st.name||c.name||"");
+  const phone=zplEsc(st.phone||c.phone||"");
+  const lines=[];
+  if(st.company && st.company!==(st.name||c.name)) lines.push(zplEsc(st.company));
+  (st.lines||[]).forEach(l=>{ if(l) lines.push(zplEsc(l)); });
+  const W = LABEL_W - 40; // usable width inside a 20-dot margin each side
+  const z=[];
+  z.push("^XA");
+  z.push("^CI28");                         // UTF-8 input
+  z.push("^PW"+LABEL_W);
+  z.push("^LL"+LABEL_H);
+  z.push("^FO20,20^A0N,58,58^FD"+(pickup?"PICK UP":"DELIVERY")+"^FS");
+  z.push("^FO"+(LABEL_W-260)+",28^A0N,36,36^FB240,1,0,R,0^FD#"+zplEsc(o.order_id)+"^FS");
+  z.push("^FO20,92^GB"+W+",4,4^FS");
+  z.push("^FO20,112^A0N,74,74^FB"+W+",2,0,L,0^FD"+name+"^FS");
+  let y=270;
+  if(pickup){
+    z.push("^FO20,"+y+"^A0N,46,46^FB"+W+",2,0,L,0^FDReady for collection in store^FS"); y+=70;
+  } else if(lines.length){
+    z.push("^FO20,"+y+"^A0N,44,44^FB"+W+",4,4,L,0^FD"+lines.join("\\&")+"^FS");
+    y += 44*Math.min(lines.length,4) + 16;
+  }
+  if(phone){ z.push("^FO20,"+y+"^A0N,40,40^FDPh "+phone+"^FS"); y+=52; }
+  if(o.required_date){ z.push("^FO20,"+y+"^A0N,38,38^FDRequired: "+zplEsc(o.required_date)+"^FS"); y+=50; }
+  if(o.instructions){ z.push("^FO20,"+y+"^A0N,30,30^FB"+W+",2,2,L,0^FD"+zplEsc(o.instructions)+"^FS"); }
+  z.push("^XZ");
+  return z.join("\n");
+}
+
+// Zebra Browser Print runs a tiny local web service. From an HTTPS page we must
+// use its HTTPS port (9101) or the browser blocks it as mixed content.
+function zbpBase(){ return location.protocol==="https:" ? "https://127.0.0.1:9101" : "http://127.0.0.1:9100"; }
+async function zbpDefaultDevice(){
+  const r = await fetch(zbpBase()+"/default?type=printer", { cache:"no-store" });
+  if(!r.ok) throw new Error("Browser Print HTTP "+r.status);
+  let dev=null; try{ dev=JSON.parse(await r.text()); }catch{}
+  if(!dev || !dev.uid) throw new Error("no default Zebra printer selected in Browser Print");
+  return dev;
+}
+async function zbpPrint(zpl){
+  const device = await zbpDefaultDevice();
+  const r = await fetch(zbpBase()+"/write", {
+    method:"POST", headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({ device, data: zpl }),
+  });
+  if(!r.ok) throw new Error("Browser Print write HTTP "+r.status);
+}
+
+// Print a label: send ZPL straight to the Zebra via Browser Print; if that
+// isn't running/reachable, fall back to the printable HTML page (any printer).
+async function openLabel(orderId){
   const o = ORDERS[orderId];
   if(!o){ alert("Reload the page, then try Label again."); return; }
+  try{
+    await zbpPrint(zplLabel(o));
+    log("#"+orderId+" label sent to Zebra");
+    return;
+  }catch(e){
+    log("Zebra Browser Print unavailable ("+e.message+") — opening printable label instead","err");
+  }
   const w = window.open("", "wfs_label_"+orderId);
   if(!w){ alert("Pop-up blocked — allow pop-ups for this site to print labels."); return; }
   w.document.open(); w.document.write(labelHTML(o)); w.document.close(); w.focus();
