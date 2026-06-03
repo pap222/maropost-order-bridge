@@ -28,6 +28,10 @@
   input.search { padding:8px 10px; border-radius:6px; border:none; font-size:14px; width:190px; }
   /* collapsible cards */
   .card.collapsed .cbody { display:none; }
+  /* Actions bar stays visible while collapsed; hide the buttons that only
+     make sense once the card is expanded (mapping table / dispatch step). */
+  .card.collapsed .actions .saveall,
+  .card.collapsed .actions .ready { display:none; }
   .card h2 { cursor:pointer; user-select:none; }
   .card h2 .chev { margin-left:auto; font-size:13px; color:#888; transition:transform .15s; }
   .card.collapsed h2 .chev { transform:rotate(-90deg); }
@@ -441,6 +445,7 @@ function renderCard(o){
       <thead><tr><th>Product</th><th>Ordered</th><th>QuickB2B item</th><th>× factor</th><th>= qty</th><th>Stock</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
+    </div>
     <div class="actions">
       ${VIEW==="active" ? `
       <button class="saveall" onclick="saveAll('${esc(o.order_id)}', this)">Save all mappings</button>
@@ -450,7 +455,6 @@ function renderCard(o){
       ${VIEW==="active" ? `
       <button class="ready" onclick="markReady('${esc(o.order_id)}', this)">${isPickupShip(o.shipping)?'🏪 Ready for pickup':'🚚 Mark dispatched'}</button>` : ''}
       <span class="msg"></span>
-    </div>
     </div>
   </div>`;
 }
