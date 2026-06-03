@@ -18,6 +18,7 @@
   button.pushall { background:#1565c0; color:#fff; }
   button.saveall { background:#607d8b; color:#fff; }
   button.invoice { background:#455a64; color:#fff; }
+  button.refund { background:#ad1457; color:#fff; }
   button:disabled { opacity:.5; cursor:not-allowed; }
   main { padding:20px; max-width:1100px; margin:0 auto; }
   .card { background:#fff; border:1px solid var(--line); border-radius:10px; margin-bottom:18px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.06); }
@@ -27,6 +28,9 @@
   th, td { text-align:left; padding:7px 16px; border-bottom:1px solid #f0f0f0; }
   th { color:#888; font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:.04em; }
   tr.unmapped td { background:#fff8e1; }
+  tr.navail td { background:#ffebee; }
+  tr.navail td b { text-decoration:line-through; color:#b71c1c; }
+  label.avail { display:inline-flex; align-items:center; gap:5px; font-size:12px; color:#c62828; font-weight:600; white-space:nowrap; cursor:pointer; }
   input.code { width:90px; text-transform:uppercase; }
   input.qbpick { width:230px; }
   .qbdesc { font-size:11px; margin-top:3px; color:var(--green); }
@@ -37,6 +41,7 @@
   .badge { font-size:11px; font-weight:700; padding:2px 8px; border-radius:20px; }
   .badge.synced { background:#e8f5e9; color:var(--green); }
   .badge.unmapped { background:#fff3e0; color:var(--amber); }
+  .badge.na { background:#ffebee; color:var(--red); }
   .badge.date { background:#e3f2fd; color:#1565c0; font-size:13px; }
   .actions { padding:12px 16px; display:flex; gap:10px; align-items:center; }
   .save { background:#eee; color:#333; padding:5px 10px; font-size:12px; }
@@ -185,8 +190,10 @@ function invoiceHTML(o){
   const c = o.customer || {};
   const isPickup = /pick\s*-?\s*up/i.test(o.shipping||"");
   const rows = o.lines.map(l=>`
-    <tr><td class="r">${l.ordered_qty}</td><td>${esc(l.product_name||l.sku)}</td>
+    <tr class="${l.unavailable?'na':''}"><td class="r">${l.ordered_qty}</td>
+    <td>${esc(l.product_name||l.sku)}${l.unavailable?' <span class="natag">NOT AVAILABLE</span>':''}</td>
     <td class="r">${money(l.unit_price)}</td><td class="r">0.00%</td><td class="r">${money(l.line_total)}</td></tr>`).join("");
+  const refund = Number(o.refund_total||0);
 
   // Totals breakdown mirrors Maropost's Tax Invoice: product subtotal, shipping,
   // 2.2% card surcharge, GST (already included in the prices), grand total, then
@@ -204,6 +211,8 @@ function invoiceHTML(o){
     totalRow("Grand Total", o.grand_total, "tot"),
     totalRow("Amount Paid", o.amount_paid),
     totalRow("Balance Due", o.balance_due, o.balance_due>0.001?"due":""),
+    (refund>0) ? `<tr class="due"><td colspan="4" class="r">Less unavailable items (refunded)</td><td class="r">-${money(refund)}</td></tr>` : "",
+    (refund>0) ? totalRow("Adjusted Total", Number((o.grand_total-refund).toFixed(2)), "tot") : "",
   ].join("");
 
   const payRows = (o.payments||[]).map(p=>`
@@ -229,6 +238,8 @@ function invoiceHTML(o){
     table{width:100%;border-collapse:collapse;margin-top:6px;}
     th,td{padding:7px 8px;border-bottom:1px solid #ddd;text-align:left;} th{background:#f3f3f3;}
     .r{text-align:right;} .muted{color:#999;}
+    tr.na td{text-decoration:line-through;color:#b71c1c;}
+    .natag{text-decoration:none;display:inline-block;margin-left:6px;font-size:10px;font-weight:bold;color:#fff;background:#c62828;padding:1px 5px;border-radius:3px;vertical-align:middle;}
     tfoot td{border-bottom:none;padding:4px 8px;}
     tfoot .tot td{font-weight:bold;font-size:15px;border-top:2px solid #111;padding-top:8px;}
     tfoot .due td{font-weight:bold;color:#c62828;}
@@ -287,7 +298,7 @@ function openInvoice(orderId){
 
 function renderCard(o){
   const rows = o.lines.map((l,i)=>`
-    <tr class="${l.mapped?'':'unmapped'}" data-sku="${esc(l.sku)}">
+    <tr class="${l.mapped?'':'unmapped'} ${l.unavailable?'navail':''}" data-sku="${esc(l.sku)}">
       <td><b>${esc(l.product_name||l.sku)}</b></td>
       <td>${l.ordered_qty}</td>
       <td>
@@ -296,6 +307,7 @@ function renderCard(o){
       </td>
       <td><input class="factor${l.factor!=1?' diff':''}" type="number" step="0.001" value="${l.factor}" oninput="markFactor(this)" /></td>
       <td class="out">${l.out_qty==null?'<span class="badge unmapped">unmapped</span>':l.out_qty}</td>
+      <td><label class="avail" title="Mark not available — will be refunded"><input type="checkbox" ${l.unavailable?'checked':''} onchange="toggleAvail(this,'${esc(o.order_id)}')" /> N/A</label></td>
       <td><button class="save" onclick="saveMap(this)">Save</button> <span class="msg"></span></td>
     </tr>`).join("");
   const c=o.customer;
@@ -304,16 +316,18 @@ function renderCard(o){
       ${o.required_date?`<span class="badge date">📅 wants ${esc(o.required_date)}</span>`:''}
       ${o.synced?'<span class="badge synced">already pushed</span>':''}
       ${o.unmapped_count?`<span class="badge unmapped">${o.unmapped_count} unmapped</span>`:''}
+      <span class="badge na nacount" ${o.unavailable_count?'':'style="display:none"'}>${o.unavailable_count||0} not available</span>
     </h2>
     <div class="cust"><b>${esc(c.name)}</b> &nbsp; ${esc(c.phone||'')} &nbsp; ${esc(c.address||'')} ${c.email&&c.email!==c.name?`&nbsp; <span class="note">${esc(c.email)}</span>`:''}${o.shipping?` &nbsp;·&nbsp; <b>${esc(o.shipping)}</b>`:''}</div>
     <table>
-      <thead><tr><th>Product</th><th>Ordered</th><th>QuickB2B item</th><th>× factor</th><th>= qty</th><th></th></tr></thead>
+      <thead><tr><th>Product</th><th>Ordered</th><th>QuickB2B item</th><th>× factor</th><th>= qty</th><th>Stock</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
     <div class="actions">
       <button class="saveall" onclick="saveAll('${esc(o.order_id)}', this)">Save all mappings</button>
       <button class="push" onclick="pushOne('${esc(o.order_id)}', this)" ${o.synced?'disabled':''}>Confirm & Push</button>
       <button class="invoice" onclick="openInvoice('${esc(o.order_id)}')">🖨 Invoice</button>
+      <button class="refund" onclick="doRefund('${esc(o.order_id)}', this)" ${o.refund_total>0?'':'disabled'}>↩ Refund <span class="ramt">${money(o.refund_total||0)}</span></button>
       <span class="msg"></span>
     </div>
   </div>`;
@@ -384,6 +398,60 @@ async function pushAll(){
     const btn=$(".push",card);
     if(btn && !btn.disabled){ await pushOne(card.dataset.order, btn, {fromAll:true}); }
   }
+}
+
+// --- "not available" + Stripe refund --------------------------------------
+async function toggleAvail(cb, orderId){
+  const tr = cb.closest("tr");
+  const sku = tr.dataset.sku;
+  const flag = cb.checked; // checked = NOT available
+  tr.classList.toggle("navail", flag);
+  try{
+    const r = await api("/api/set-unavailable",{ method:"POST", body: JSON.stringify({ orderId, sku, unavailable: flag }) });
+    if(r.ok){
+      const o = ORDERS[orderId];
+      if(o){ const ln=o.lines.find(x=>String(x.sku)===String(sku)); if(ln) ln.unavailable=flag; }
+      refreshRefundUI(orderId);
+      log(`#${orderId} ${sku} ${flag?"marked NOT AVAILABLE":"back in stock"}`);
+    } else {
+      cb.checked=!flag; tr.classList.toggle("navail",!flag);
+      log(`Failed to update ${sku}: ${r.error||"?"}`,"err");
+    }
+  }catch(e){ if(e.message!=="unauthorized"){ cb.checked=!flag; tr.classList.toggle("navail",!flag); log(e.message,"err"); } }
+}
+
+// Recompute the refund total from the cached lines and refresh the button + badge.
+function refreshRefundUI(orderId){
+  const o = ORDERS[orderId]; if(!o) return;
+  const naLines = o.lines.filter(l=>l.unavailable);
+  o.refund_total = Number(naLines.reduce((s,l)=>s+(Number(l.line_total)||0),0).toFixed(2));
+  o.unavailable_count = naLines.length;
+  const card = document.querySelector(".card[data-order='"+cssEsc(orderId)+"']");
+  if(!card) return;
+  const btn = card.querySelector("button.refund");
+  if(btn){ btn.disabled = !(o.refund_total>0); const amt=btn.querySelector(".ramt"); if(amt) amt.textContent=money(o.refund_total); }
+  const badge = card.querySelector(".nacount");
+  if(badge){ badge.textContent = `${o.unavailable_count} not available`; badge.style.display = o.unavailable_count? "" : "none"; }
+}
+
+async function doRefund(orderId, btn){
+  const o = ORDERS[orderId];
+  const total = o ? Number(o.refund_total||0) : 0;
+  if(!(total>0)){ alert("Mark at least one item “N/A” (not available) first."); return; }
+  const items = o.lines.filter(l=>l.unavailable).map(l=>"• "+(l.product_name||l.sku)+"  "+money(l.line_total)).join("\n");
+  if(!confirm(`Refund ${money(total)} to the customer via Stripe?\n\nOrder #${orderId} — not available:\n${items}\n\n⚠ This sends REAL money back to the customer. Continue?`)) return;
+  const msg = $(".msg", btn.parentElement); msg.textContent="refunding…"; msg.className="msg"; btn.disabled=true;
+  try{
+    const r = await api("/api/refund",{ method:"POST", body: JSON.stringify({ orderId }) });
+    if(r.ok){
+      msg.textContent = r.already ? `already refunded ${money(r.refunded)}` : `refunded ${money(r.refunded)} ✓`;
+      msg.className="msg ok";
+      log(`#${orderId} REFUNDED ${money(r.refunded)}${r.stripe_refund_id?" ("+r.stripe_refund_id+")":""}${r.already?" [already]":""}`);
+    } else {
+      msg.textContent = r.message||r.error||"failed"; msg.className="msg err"; btn.disabled=false;
+      log(`#${orderId} REFUND FAILED: ${r.message||r.error}`,"err");
+    }
+  }catch(e){ if(e.message!=="unauthorized"){ msg.textContent=e.message; msg.className="msg err"; btn.disabled=false; } }
 }
 
 function markFactor(inp){ const v=parseFloat(inp.value); inp.classList.toggle('diff', !isNaN(v) && v!==1); }

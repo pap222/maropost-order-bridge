@@ -8,12 +8,16 @@ import ordersFn from "./netlify/functions/orders.mjs";
 import saveFn from "./netlify/functions/save-mapping.mjs";
 import pushFn from "./netlify/functions/push-order.mjs";
 import settingsFn from "./netlify/functions/settings.mjs";
+import unavailableFn from "./netlify/functions/set-unavailable.mjs";
+import refundFn from "./netlify/functions/refund.mjs";
 
 const ROUTES = {
   "/api/orders": ordersFn,
   "/api/save-mapping": saveFn,
   "/api/push-order": pushFn,
   "/api/settings": settingsFn,
+  "/api/set-unavailable": unavailableFn,
+  "/api/refund": refundFn,
 };
 const PORT = 8910;
 

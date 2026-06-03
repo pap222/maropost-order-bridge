@@ -26,5 +26,15 @@
   to = "/.netlify/functions/settings"
   status = 200
 
+[[redirects]]
+  from = "/api/set-unavailable"
+  to = "/.netlify/functions/set-unavailable"
+  status = 200
+
+[[redirects]]
+  from = "/api/refund"
+  to = "/.netlify/functions/refund"
+  status = 200
+
 # The scheduled cron (maropost-to-quickb2b) is declared in-code via
 # `export const config = { schedule }` and no-ops unless AUTO_MODE=1.
