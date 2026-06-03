@@ -24,7 +24,7 @@ export default async (req) => {
     const done = await syncedSet(ids);
     const unavail = await unavailableMap(ids);
     const reviewed = orders.map((o) => {
-      const r = reviewOrder(o, itemMap, unavail.get(String(o.OrderID)) || new Set());
+      const r = reviewOrder(o, itemMap, unavail.get(String(o.OrderID)) || new Map());
       r.synced = done.has(r.order_id);
       return r;
     });

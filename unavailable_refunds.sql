@@ -1,13 +1,18 @@
 -- Run this in Supabase (SQL editor) to enable the "not available" marks and
 -- the Stripe refund ledger used by the order bridge.
 
--- One row per order line that's been flagged not available. Presence = flagged.
+-- One row per short-supplied order line. `qty` = how many units are NOT
+-- available (the rest are still sent). qty NULL = whole line unavailable.
 create table if not exists unavailable_lines (
   maropost_order_id text not null,
   sku               text not null,
+  qty               numeric(10,3),
   created_at        timestamptz not null default now(),
   primary key (maropost_order_id, sku)
 );
+
+-- If the table already existed without the qty column, add it.
+alter table unavailable_lines add column if not exists qty numeric(10,3);
 
 -- Ledger of refunds we've issued via Stripe, so we never double-refund and can
 -- show how much has already been returned for an order.
