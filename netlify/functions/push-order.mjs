@@ -22,8 +22,17 @@ export default async (req) => {
 
     const itemMap = await loadItemMap();
     const { payload, unmapped } = buildPayload(order, itemMap);
+    // Nothing goes to QuickB2B with a missing mapping - every line must resolve
+    // to an item code (use a MISC code if there's no exact match).
+    if (unmapped.length) {
+      return json({
+        error: `Map every line before pushing. Unmapped: ${unmapped.join(", ")}. ` +
+          `If there's no exact QuickB2B item, map it to a MISC code.`,
+        unmapped,
+      }, 400);
+    }
     if (payload.OrderDetail.length === 0) {
-      return json({ error: "Every line is unmapped - map at least one before pushing", unmapped }, 400);
+      return json({ error: "No line items to push", unmapped }, 400);
     }
 
     const result = await createQb2bOrder(payload, !!testMode);

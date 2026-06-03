@@ -25,6 +25,14 @@
   .tabs button { background:#fff; color:#555; border:1px solid var(--line); }
   .tabs button.on { background:var(--green); color:#fff; border-color:var(--green); }
   .tabs button .tcount { font-size:11px; opacity:.8; margin-left:4px; }
+  input.search { padding:8px 10px; border-radius:6px; border:none; font-size:14px; width:190px; }
+  /* collapsible cards */
+  .card.collapsed .cbody { display:none; }
+  .card h2 { cursor:pointer; user-select:none; }
+  .card h2 .chev { margin-left:auto; font-size:13px; color:#888; transition:transform .15s; }
+  .card.collapsed h2 .chev { transform:rotate(-90deg); }
+  .summary { font-size:12px; color:#777; font-weight:400; }
+  .instr { margin:0; padding:8px 16px; background:#fff8e1; color:#8a6d00; font-size:12px; border-bottom:1px solid var(--line); }
   main { padding:20px; max-width:1100px; margin:0 auto; }
   .card { background:#fff; border:1px solid var(--line); border-radius:10px; margin-bottom:18px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.06); }
   .card h2 { font-size:16px; margin:0; padding:12px 16px; background:#fafafa; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
@@ -76,6 +84,8 @@
   <label class="ctl"><input type="checkbox" id="testMode" checked /> Test mode (no real order)</label>
   <label class="ctl auto"><input type="checkbox" id="autoMode" onchange="saveAuto(this)" /> <b>Automate</b> (cron pushes every 5 min)</label>
   <span id="autoState" class="ctl"></span>
+  <input id="search" class="search" placeholder="🔎 name or order #" oninput="onSearchInput()" onkeydown="if(event.key==='Enter')searchOrders()" />
+  <button class="primary" onclick="searchOrders()">Search</button>
   <button class="primary" onclick="loadOrders()">↻ Reload</button>
   <button class="pushall" onclick="pushAll()">Push all confirmed</button>
   <button class="primary" onclick="logout()">Logout</button>
@@ -221,6 +231,42 @@ async function loadCompleted(){
   } catch(e){ if(e.message!=="unauthorized") $("#orders").innerHTML="<p class='msg err'>"+e.message+"</p>"; }
 }
 function fmtWhen(iso){ if(!iso) return ""; const d=new Date(iso); return isNaN(d)?"":d.toLocaleString("en-AU",{timeZone:"Australia/Sydney",day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}); }
+
+// --- search ---------------------------------------------------------------
+// Live filter of the cards already on the page, by order # or customer name.
+function onSearchInput(){ filterCards($("#search").value); }
+function filterCards(q){
+  q = String(q||"").trim().toLowerCase();
+  let shown = 0;
+  document.querySelectorAll("#orders .card[data-order]").forEach(card => {
+    const o = ORDERS[card.dataset.order] || {};
+    const hay = `${card.dataset.order} ${(o.customer&&o.customer.name)||""} ${o.shipping||""}`.toLowerCase();
+    const hit = !q || hay.includes(q);
+    card.style.display = hit ? "" : "none";
+    if(hit) shown++;
+  });
+  return shown;
+}
+// Enter / Search button: filter what's loaded; if it's an order number with no
+// local match, look it up on the server (works for older orders too).
+async function searchOrders(){
+  const q = $("#search").value.trim();
+  if(!q){ filterCards(""); return; }
+  const shown = filterCards(q);
+  const looksLikeNumber = /^N?\d+$/i.test(q);
+  if(shown>0 || !looksLikeNumber) return;
+  // No local match and it's an order number -> server lookup.
+  $("#orders").innerHTML = "<p>Searching order "+esc(q)+"…</p>";
+  await loadQbItems();
+  try{
+    const data = await api("/api/orders?id="+encodeURIComponent(q));
+    if(data.error){ $("#orders").innerHTML = "<p class='msg err'>"+data.error+"</p>"; return; }
+    if(!data.orders.length){ $("#orders").innerHTML = "<p>No order found for “"+esc(q)+"”. (Search by name only matches loaded orders.)</p>"; return; }
+    data.orders.forEach(o => { ORDERS[o.order_id] = o; });
+    $("#orders").innerHTML = data.orders.map(renderCard).join("");
+    log(`Found order ${data.orders[0].order_id}`);
+  }catch(e){ if(e.message!=="unauthorized") $("#orders").innerHTML="<p class='msg err'>"+e.message+"</p>"; }
+}
 
 // Maropost's invoice printout can't be deep-linked (it's a session/POST page),
 // so we generate a clean print-ready invoice from the order data and auto-print
@@ -376,14 +422,21 @@ function renderCard(o){
       <td><button class="save" onclick="saveMap(this)">Save</button> <span class="msg"></span></td>
     </tr>`).join("");
   const c=o.customer;
-  return `<div class="card" data-order="${esc(o.order_id)}">
-    <h2>#${esc(o.order_id)}
-      ${o.required_date?`<span class="badge date">📅 wants ${esc(o.required_date)}</span>`:''}
-      ${o.synced?'<span class="badge synced">already pushed</span>':''}
-      ${o.unmapped_count?`<span class="badge unmapped">${o.unmapped_count} unmapped</span>`:''}
+  const needsMap = o.unmapped_count>0;
+  const summary = `${esc(c.name)}${o.shipping?` · ${esc(o.shipping)}`:''} · ${money(o.grand_total||0)}`;
+  // Cards start collapsed ("squished") - click the header to expand & check.
+  return `<div class="card collapsed" data-order="${esc(o.order_id)}">
+    <h2 onclick="toggleCard(this)">#${esc(o.order_id)}
+      ${o.required_date?`<span class="badge date">📅 ${esc(o.required_date)}</span>`:''}
+      ${o.synced?'<span class="badge synced">pushed</span>':''}
+      ${needsMap?`<span class="badge unmapped">${o.unmapped_count} unmapped</span>`:''}
       <span class="badge na nacount" ${o.unavailable_count?'':'style="display:none"'}>${o.unavailable_count||0} short</span>
+      <span class="summary">${summary}</span>
+      <span class="chev">▼</span>
     </h2>
+    <div class="cbody">
     <div class="cust"><b>${esc(c.name)}</b> &nbsp; ${esc(c.phone||'')} &nbsp; ${esc(c.address||'')} ${c.email&&c.email!==c.name?`&nbsp; <span class="note">${esc(c.email)}</span>`:''}${o.shipping?` &nbsp;·&nbsp; <b>${esc(o.shipping)}</b>`:''}</div>
+    ${needsMap?`<p class="instr">⚠ Map every line to a QuickB2B item before pushing. If there's no exact match, use a <b>MISC</b> code (e.g. MISC) — the product name is sent as the line note.</p>`:''}
     <table>
       <thead><tr><th>Product</th><th>Ordered</th><th>QuickB2B item</th><th>× factor</th><th>= qty</th><th>Stock</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
@@ -391,15 +444,19 @@ function renderCard(o){
     <div class="actions">
       ${VIEW==="active" ? `
       <button class="saveall" onclick="saveAll('${esc(o.order_id)}', this)">Save all mappings</button>
-      <button class="push" onclick="pushOne('${esc(o.order_id)}', this)" ${o.synced?'disabled':''}>Confirm & Push</button>` : ''}
+      <button class="push" onclick="pushOne('${esc(o.order_id)}', this)" ${o.synced||needsMap?'disabled':''} title="${needsMap?'Map every line first (use a MISC code if needed)':''}">Confirm & Push</button>` : ''}
       <button class="invoice" onclick="openInvoice('${esc(o.order_id)}')">🖨 Invoice</button>
       <button class="refund" onclick="doRefund('${esc(o.order_id)}', this)" ${o.refund_total>0?'':'disabled'}>↩ Refund <span class="ramt">${money(o.refund_total||0)}</span></button>
       ${VIEW==="active" ? `
       <button class="ready" onclick="markReady('${esc(o.order_id)}', this)">${isPickupShip(o.shipping)?'🏪 Ready for pickup':'🚚 Mark dispatched'}</button>` : ''}
       <span class="msg"></span>
     </div>
+    </div>
   </div>`;
 }
+
+// Collapse / expand an order card.
+function toggleCard(h2){ h2.closest(".card").classList.toggle("collapsed"); }
 
 // Save one row's mapping. In batch mode it skips the per-row confirm popup.
 async function saveRow(tr, { batch=false } = {}){
@@ -416,6 +473,11 @@ async function saveRow(tr, { batch=false } = {}){
       if(msg){ msg.textContent="saved"; msg.className="msg ok"; }
       tr.classList.remove("unmapped");
       $(".out",tr).textContent = +( (parseFloat(tr.children[1].textContent)||1)*factor ).toFixed(3);
+      // Keep the cache + push-button state in sync as lines get mapped.
+      const card = tr.closest(".card");
+      const ord = card && ORDERS[card.dataset.order];
+      if(ord){ const ln=ord.lines.find(x=>String(x.sku)===String(sku)); if(ln){ ln.mapped=true; ln.qb_code=code; ln.factor=factor; } }
+      refreshMapState(card);
       log(`Saved ${sku} → ${code} ×${factor}`);
       return { ok:true };
     } else { if(msg){ msg.textContent=r.error||"error"; msg.className="msg err"; } return { ok:false, error:r.error }; }
@@ -423,6 +485,26 @@ async function saveRow(tr, { batch=false } = {}){
 }
 
 async function saveMap(btn){ await saveRow(btn.closest("tr")); }
+
+// After a mapping changes, refresh the "unmapped" count, push-button enablement
+// and the MISC instruction for that card.
+function refreshMapState(card){
+  if(!card) return;
+  const ord = ORDERS[card.dataset.order];
+  if(!ord) return;
+  ord.unmapped_count = ord.lines.filter(l=>!l.mapped).length;
+  const badge = card.querySelector(".badge.unmapped");
+  const push = card.querySelector("button.push");
+  const instr = card.querySelector(".instr");
+  if(ord.unmapped_count>0){
+    if(badge){ badge.textContent = `${ord.unmapped_count} unmapped`; badge.style.display=""; }
+    if(push){ push.disabled = true; push.title = "Map every line first (use a MISC code if needed)"; }
+  } else {
+    if(badge) badge.style.display="none";
+    if(instr) instr.remove();
+    if(push && !ord.synced){ push.disabled=false; push.title=""; }
+  }
+}
 
 async function saveAll(orderId, btn){
   const card = btn.closest(".card");
@@ -515,17 +597,78 @@ async function doRefund(orderId, btn){
   const items = o.lines.filter(l=>Number(l.na_qty)>0).map(l=>`• ${l.na_qty} × ${(l.product_name||l.sku)}  ${money(l.refund_line)}`).join("\n");
   if(!confirm(`Refund ${money(total)} to the customer via Stripe?\n\nOrder #${orderId} — short supply:\n${items}\n\n⚠ This sends REAL money back to the customer. Continue?`)) return;
   const msg = $(".msg", btn.parentElement); msg.textContent="refunding…"; msg.className="msg"; btn.disabled=true;
+  await sendRefund(orderId, btn, msg, null);
+}
+
+// Does the actual POST; if Stripe can't be auto-located, prompts once for the
+// payment id (pi_… / ch_…) and retries directly against it.
+async function sendRefund(orderId, btn, msg, stripeId){
   try{
-    const r = await api("/api/refund",{ method:"POST", body: JSON.stringify({ orderId }) });
+    const body = stripeId ? { orderId, stripeId } : { orderId };
+    const r = await api("/api/refund",{ method:"POST", body: JSON.stringify(body) });
     if(r.ok){
       msg.textContent = r.already ? `already refunded ${money(r.refunded)}` : `refunded ${money(r.refunded)} ✓`;
       msg.className="msg ok";
-      log(`#${orderId} REFUNDED ${money(r.refunded)}${r.stripe_refund_id?" ("+r.stripe_refund_id+")":""}${r.already?" [already]":""}`);
-    } else {
-      msg.textContent = r.message||r.error||"failed"; msg.className="msg err"; btn.disabled=false;
-      log(`#${orderId} REFUND FAILED: ${r.message||r.error}`,"err");
+      log(`#${orderId} REFUNDED ${money(r.refunded)}${r.stripe_refund_id?" ("+r.stripe_refund_id+")":""}${r.matched_by?" ["+r.matched_by+"]":""}${r.already?" [already]":""}`);
+      if(r.docket) openRefundDocket(r.docket);
+      return;
     }
+    if(r.needStripeId){
+      const id = prompt(`Couldn't auto-find the Stripe payment for #${orderId}.\n\nOpen the payment in Stripe and paste its ID below (starts with pi_ or ch_):`);
+      if(id && id.trim()){
+        msg.textContent="refunding…"; msg.className="msg";
+        return sendRefund(orderId, btn, msg, id.trim());
+      }
+    }
+    msg.textContent = r.message||r.error||"failed"; msg.className="msg err"; btn.disabled=false;
+    log(`#${orderId} REFUND FAILED: ${r.message||r.error}`,"err");
   }catch(e){ if(e.message!=="unauthorized"){ msg.textContent=e.message; msg.className="msg err"; btn.disabled=false; } }
+}
+
+// Printable refund docket / credit note, opened + auto-printed after a refund.
+function openRefundDocket(d){
+  const w = window.open("", "wfs_refund_"+d.order_id);
+  if(!w) return; // pop-up blocked - not fatal, the refund already went through
+  w.document.open(); w.document.write(refundDocketHTML(d)); w.document.close(); w.focus();
+  setTimeout(()=>{ try{ w.print(); }catch(e){} }, 350);
+}
+function refundDocketHTML(d){
+  const c = d.customer || {};
+  const when = d.date ? new Date(d.date) : new Date();
+  const dateStr = when.toLocaleString("en-AU",{timeZone:"Australia/Sydney",day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
+  const rows = (d.lines||[]).map(l=>`<tr>
+    <td class="r">${l.qty}</td><td>${esc(l.product_name||l.sku)}</td>
+    <td class="r">${money(l.unit_price)}</td><td class="r">${money(l.amount)}</td></tr>`).join("");
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Refund ${esc(d.order_id)}</title>
+    <style>
+      body{font-family:system-ui,Segoe UI,Roboto,sans-serif;color:#222;margin:28px;}
+      .head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #c62828;padding-bottom:10px;}
+      h1{margin:0;font-size:22px;} .sub{color:#c62828;font-weight:700;letter-spacing:.04em;}
+      .meta{font-size:12px;color:#555;text-align:right;}
+      table{width:100%;border-collapse:collapse;margin-top:18px;font-size:13px;}
+      th,td{padding:7px 8px;border-bottom:1px solid #eee;text-align:left;}
+      th{font-size:11px;text-transform:uppercase;color:#888;}
+      .r{text-align:right;} tfoot td{font-weight:700;border-top:2px solid #333;font-size:15px;}
+      .who{margin-top:14px;font-size:13px;} .note{margin-top:8px;font-size:11px;color:#777;}
+      .badge{display:inline-block;background:#c62828;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;}
+    </style></head><body>
+    <div class="head">
+      <div><h1>${esc(d.business?.name||'Wagga Fruit Supply')}</h1><div class="sub">REFUND / CREDIT NOTE</div></div>
+      <div class="meta">Order #${esc(d.order_id)}<br>${esc(dateStr)}<br>
+        ${d.stripe_refund_id?`Stripe: ${esc(d.stripe_refund_id)}<br>`:''}
+        <span class="badge">${esc((d.status||'refunded').toUpperCase())}</span></div>
+    </div>
+    <div class="who"><b>${esc(c.name||'')}</b>${c.phone?` · ${esc(c.phone)}`:''}${c.email&&c.email!==c.name?` · ${esc(c.email)}`:''}</div>
+    <table>
+      <thead><tr><th class="r">Qty</th><th>Item refunded (short supply)</th><th class="r">Unit Price</th><th class="r">Refund</th></tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot>
+        <tr><td colspan="3" class="r">This refund</td><td class="r">${money(d.this_refund)}</td></tr>
+        ${Number(d.total_refunded)>Number(d.this_refund)?`<tr><td colspan="3" class="r">Total refunded on this order</td><td class="r">${money(d.total_refunded)}</td></tr>`:''}
+      </tfoot>
+    </table>
+    <div class="note">Refund processed via Stripe to the original payment method. Prices include GST where applicable.</div>
+  </body></html>`;
 }
 
 // Pickup vs delivery from the shipping label (mirrors the server's isPickup).

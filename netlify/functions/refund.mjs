@@ -13,7 +13,7 @@ export default async (req) => {
   if (unauth) return unauth;
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
   try {
-    const { orderId } = await req.json();
+    const { orderId, stripeId } = await req.json();
     if (!orderId) return json({ error: "orderId required" }, 400);
 
     // Re-fetch live so the amounts are authoritative, not whatever the page had.
@@ -33,11 +33,12 @@ export default async (req) => {
       return json({ ok: true, already: true, refunded: already, message: `Already refunded $${already.toFixed(2)}` });
     }
 
-    const pay = await findStripePayment(orderId);
+    const pay = await findStripePayment(orderId, stripeId);
     if (!pay) {
       return json({
-        error: `Couldn't find the Stripe payment for order ${orderId}. ` +
-          `Check the order id is stored in the Stripe charge metadata (set STRIPE_ORDER_ID_META_KEY if it uses a different key).`,
+        error: `Couldn't auto-find the Stripe payment for order ${orderId}. ` +
+          `Open the payment in Stripe and paste its ID (pi_… or ch_…) to refund it directly.`,
+        needStripeId: true,
       }, 404);
     }
 
@@ -50,7 +51,8 @@ export default async (req) => {
       reason: `Unavailable items on web order ${orderId}`,
     });
 
-    const skus = r.lines.filter((l) => l.unavailable).map((l) => l.sku).join(",");
+    const naLines = r.lines.filter((l) => l.unavailable);
+    const skus = naLines.map((l) => l.sku).join(",");
     if (result.ok) {
       await recordRefund({
         orderId,
@@ -65,6 +67,26 @@ export default async (req) => {
         total_refunded: Number((already + delta).toFixed(2)),
         stripe_refund_id: result.data.id,
         status: result.data.status,
+        matched_by: pay.matchedBy,
+        // Everything the printable refund docket / credit note needs.
+        docket: {
+          order_id: String(orderId),
+          customer: r.customer,
+          ship_to: r.ship_to,
+          bill_to: r.bill_to,
+          business: r.business,
+          shipping: r.shipping,
+          date: new Date().toISOString(),
+          stripe_refund_id: result.data.id,
+          status: result.data.status,
+          this_refund: delta,
+          total_refunded: Number((already + delta).toFixed(2)),
+          grand_total: r.grand_total,
+          lines: naLines.map((l) => ({
+            sku: l.sku, product_name: l.product_name,
+            qty: l.na_qty, unit_price: l.unit_price, amount: l.refund_line,
+          })),
+        },
       });
     }
     return json({ ok: false, status: result.status, message: result.message, stripe: result.data }, 502);

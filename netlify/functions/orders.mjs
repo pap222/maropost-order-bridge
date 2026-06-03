@@ -1,17 +1,20 @@
-// GET /api/orders[?view=active|delivery|pickup]
+// GET /api/orders[?view=active|delivery|pickup][?id=N27575]
 //   active   (default) -> orders still "to process" (active statuses)
 //   delivery           -> orders already marked ready for delivery (Dispatched)
 //   pickup             -> orders already marked ready for pickup (Pending Pickup)
+//   id=<orderId>       -> look up one specific order by number (search box)
 // Each row carries its QuickB2B mapping + whether it's already synced.
 // Protected by shared password.
-import { checkAuth, json, cfg, loadItemMap, fetchWebsiteOrders, reviewOrder, syncedSet, unavailableMap } from "../../lib/bridge.mjs";
+import { checkAuth, json, cfg, loadItemMap, fetchWebsiteOrders, fetchOneOrder, reviewOrder, syncedSet, unavailableMap } from "../../lib/bridge.mjs";
 
 export default async (req) => {
   const unauth = checkAuth(req);
   if (unauth) return unauth;
   try {
     const c = cfg();
-    const view = new URL(req.url).searchParams.get("view") || "active";
+    const params = new URL(req.url).searchParams;
+    const view = params.get("view") || "active";
+    const lookupId = (params.get("id") || "").trim();
     const statusFor = { delivery: [c.deliveryStatus], pickup: [c.pickupStatus] };
     // The ready tabs don't require the paid filter (already vetted when processed)
     // and pull only the matching post-fulfilment status.
@@ -19,7 +22,14 @@ export default async (req) => {
       ? { statuses: statusFor[view], requirePaid: false }
       : {};
     const itemMap = await loadItemMap();
-    const orders = await fetchWebsiteOrders(opts);
+    // Search by order number: accept "27575" or "N27575" and look it up directly.
+    const orders = lookupId
+      ? await (async () => {
+          const id = /^N/i.test(lookupId) ? lookupId.toUpperCase() : "N" + lookupId.replace(/\D/g, "");
+          const one = await fetchOneOrder(id);
+          return one ? [one] : [];
+        })()
+      : await fetchWebsiteOrders(opts);
     const ids = orders.map((o) => String(o.OrderID));
     const done = await syncedSet(ids);
     const unavail = await unavailableMap(ids);
