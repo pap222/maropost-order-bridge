@@ -2,7 +2,7 @@
 // Re-fetches the order live, builds the docket from current item_map, pushes to
 // QuickB2B (test or live), and records it in synced_orders. Idempotent: a second
 // push of the same order is skipped.
-import { checkAuth, json, loadItemMap, fetchOneOrder, buildPayload, createQb2bOrder, markSynced, syncedSet } from "../../lib/bridge.mjs";
+import { checkAuth, json, loadItemMap, fetchOneOrder, buildPayload, createQb2bOrder, markSynced, syncedSet, qb2bInvoiceNo } from "../../lib/bridge.mjs";
 
 export default async (req) => {
   const unauth = checkAuth(req);
@@ -37,8 +37,9 @@ export default async (req) => {
 
     const result = await createQb2bOrder(payload, !!testMode);
     if (result.ok) {
-      await markSynced(orderId, testMode ? "test" : "created", payload);
-      return json({ ok: true, testMode: !!testMode, qb2b: result.data, unmapped });
+      const invoice = qb2bInvoiceNo(result.data);
+      await markSynced(orderId, testMode ? "test" : "created", payload, invoice);
+      return json({ ok: true, testMode: !!testMode, qb2b: result.data, qb2b_invoice: invoice, unmapped });
     }
     return json({
       ok: false,

@@ -43,3 +43,8 @@ create table if not exists fulfilled_orders (
 );
 
 create index if not exists fulfilled_orders_at_idx on fulfilled_orders (fulfilled_at);
+
+-- Store the QuickB2B invoice / order number returned when an order is pushed,
+-- so the dashboard can show "Sent to QuickB2B inv XXX" instead of a generic
+-- "pushed" badge. (Safe to run even if synced_orders already exists.)
+alter table synced_orders add column if not exists qb2b_invoice text;

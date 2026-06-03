@@ -529,7 +529,7 @@ function renderCard(o){
       <span class="modepill">${modePill}</span>
       <span class="cname">${esc(c.name)}</span>
       ${o.required_date?`<span class="badge date">📅 ${esc(o.required_date)}</span>`:''}
-      ${o.synced?'<span class="badge synced">pushed</span>':''}
+      ${o.synced?`<span class="badge synced">${o.qb2b_invoice?`✓ QuickB2B inv ${esc(o.qb2b_invoice)}`:'✓ Sent to QuickB2B'}</span>`:''}
       ${needsMap?`<span class="badge unmapped">${o.unmapped_count} unmapped</span>`:''}
       <span class="badge na nacount" ${o.unavailable_count?'':'style="display:none"'}>${o.unavailable_count||0} short</span>
       <span class="summary">${summary}</span>
@@ -629,14 +629,22 @@ async function pushOne(orderId, btn, opts={}){
   try{
     const r = await api("/api/push-order",{ method:"POST", body: JSON.stringify({ orderId, testMode: testMode() }) });
     if(r.ok){
-      msg.textContent = r.already ? "already pushed" : (testMode()? "TEST ok ✓" : "pushed ✓");
+      const inv = r.qb2b_invoice || "";
+      const sentLabel = inv ? `Sent to QuickB2B inv ${inv}` : "Sent to QuickB2B";
+      msg.textContent = r.already ? "already pushed" : (testMode()? "TEST ok ✓" : `${sentLabel} ✓`);
       msg.className="msg ok";
-      log(`#${orderId} ${r.already?'already synced':(testMode()?'TEST pushed':'PUSHED')}${r.unmapped&&r.unmapped.length?' (flagged: '+r.unmapped.join(', ')+')':''}`);
+      log(`#${orderId} ${r.already?'already synced':(testMode()?'TEST pushed':(inv?`SENT TO QUICKB2B inv ${inv}`:'SENT TO QUICKB2B'))}${r.unmapped&&r.unmapped.length?' (flagged: '+r.unmapped.join(', ')+')':''}`);
       // Pop the Maropost invoice for printing. Skipped during "Push all" (browsers
       // block many pop-ups at once) — use the per-order 🖨 Invoice button there.
       if(!opts.fromAll && !r.already) openInvoice(orderId);
-      const badge=document.createElement("span"); badge.className="badge synced"; badge.textContent="already pushed";
-      $(".card[data-order='"+cssEsc(orderId)+"'] h2").appendChild(badge);
+      // Keep the cache in sync so a re-render shows the invoice badge.
+      if(ORDERS[orderId] && !testMode()){ ORDERS[orderId].synced = true; if(inv) ORDERS[orderId].qb2b_invoice = inv; }
+      const card = $(".card[data-order='"+cssEsc(orderId)+"']");
+      if(card && !testMode()){
+        let badge = card.querySelector("h2 .badge.synced");
+        if(!badge){ badge=document.createElement("span"); badge.className="badge synced"; card.querySelector("h2").appendChild(badge); }
+        badge.textContent = inv ? `✓ QuickB2B inv ${inv}` : "✓ Sent to QuickB2B";
+      }
     } else {
       msg.textContent = r.message||r.error||"failed"; msg.className="msg err"; btn.disabled=false;
       log(`#${orderId} FAILED: ${r.message||r.error}`,"err");

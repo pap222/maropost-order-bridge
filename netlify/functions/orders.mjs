@@ -54,6 +54,7 @@ export default async (req) => {
     const reviewed = orders.map((o) => {
       const r = reviewOrder(o, itemMap, unavail.get(String(o.OrderID)) || new Map());
       r.synced = done.has(r.order_id);
+      r.qb2b_invoice = done.get(r.order_id) || "";
       return r;
     });
     return json({ count: reviewed.length, orders: reviewed });
