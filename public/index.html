@@ -659,17 +659,21 @@ async function zbpPrint(zpl){
 async function openLabel(orderId){
   const o = ORDERS[orderId];
   if(!o){ alert("Reload the page, then try Label again."); return; }
+  let printed=false;
   try{
     await zbpPrint(zplLabel(o));
     log("#"+orderId+" label sent to Zebra");
-    return;
+    printed=true;
   }catch(e){
     log("Zebra Browser Print unavailable ("+e.message+") — opening printable label instead","err");
+    const w = window.open("", "wfs_label_"+orderId);
+    if(!w){ alert("Pop-up blocked — allow pop-ups for this site to print labels."); return; }
+    w.document.open(); w.document.write(labelHTML(o)); w.document.close(); w.focus();
+    setTimeout(()=>{ try{ w.print(); }catch(e){} }, 350);
+    printed=true;
   }
-  const w = window.open("", "wfs_label_"+orderId);
-  if(!w){ alert("Pop-up blocked — allow pop-ups for this site to print labels."); return; }
-  w.document.open(); w.document.write(labelHTML(o)); w.document.close(); w.focus();
-  setTimeout(()=>{ try{ w.print(); }catch(e){} }, 350);
+  // The label is the last packing step — offer to finish (status + SMS) now.
+  if(printed) await offerFinish(orderId);
 }
 
 function renderCard(o){
@@ -967,13 +971,18 @@ function isPickupShip(ship){ return /pick\s*-?\s*up/i.test(String(ship||"")); }
 
 // "Mark ready": change the Maropost status (Dispatched / Pending Pickup), which
 // fires the customer SMS, then drop the card off the active board.
-async function markReady(orderId, btn){
+async function markReady(orderId, btn, opts={}){
   const o = ORDERS[orderId];
   const pickup = isPickupShip(o && o.shipping);
   const verb = pickup ? "ready for pickup (Pending Pickup)" : "dispatched (Dispatched)";
-  if(o && o.synced===false && !confirm(`Order #${orderId} hasn't been pushed to QuickB2B yet.\nMark it ${verb} anyway?`)) return;
+  if(opts.skipConfirm){
+    // Caller already prompted (e.g. the label flow) — but still guard an unpushed order.
+    if(o && o.synced===false && !confirm(`Order #${orderId} hasn't been pushed to QuickB2B yet.\nFinish it anyway?`)) return;
+  } else if(o && o.synced===false && !confirm(`Order #${orderId} hasn't been pushed to QuickB2B yet.\nMark it ${verb} anyway?`)) return;
   else if(!(o && o.synced===false) && !confirm(`Mark order #${orderId} as ${verb}?\n\nThis changes the Maropost status and sends the customer an SMS, then removes it from this list.`)) return;
-  const msg = $(".msg", btn.parentElement); msg.textContent="updating…"; msg.className="msg"; btn.disabled=true;
+  const msg = btn ? $(".msg", btn.parentElement) : null;
+  if(msg){ msg.textContent="updating…"; msg.className="msg"; }
+  if(btn) btn.disabled=true;
   try{
     const r = await api("/api/mark-ready",{ method:"POST", body: JSON.stringify({ orderId }) });
     if(r.ok){
@@ -981,10 +990,22 @@ async function markReady(orderId, btn){
       const card = document.querySelector(".card[data-order='"+cssEsc(orderId)+"']");
       if(card){ card.style.transition="opacity .3s"; card.style.opacity="0"; setTimeout(()=>{ card.remove(); if(!$("#orders").querySelector(".card")) $("#orders").innerHTML="<p>No paid Website orders waiting. 🎉</p>"; }, 300); }
     } else {
-      msg.textContent = r.error||"failed"; msg.className="msg err"; btn.disabled=false;
+      if(msg){ msg.textContent = r.error||"failed"; msg.className="msg err"; }
+      if(btn) btn.disabled=false;
       log(`#${orderId} MARK READY FAILED: ${r.error}`,"err");
     }
-  }catch(e){ if(e.message!=="unauthorized"){ msg.textContent=e.message; msg.className="msg err"; btn.disabled=false; } }
+  }catch(e){ if(e.message!=="unauthorized"){ if(msg){ msg.textContent=e.message; msg.className="msg err"; } if(btn) btn.disabled=false; } }
+}
+
+// After a label prints, offer to finish the order: flip the Maropost status
+// (which texts the customer) and drop it off the To-process board.
+async function offerFinish(orderId){
+  const o = ORDERS[orderId]; if(!o) return;
+  const pickup = isPickupShip(o.shipping);
+  const action = pickup ? "set it to Pending Pickup (ready for collection)" : "mark it Dispatched";
+  if(!confirm(`Label printed for #${orderId}.\n\nFinish this order now?\nThis will ${action} in Maropost, text the customer, and move it to Completed.`)) return;
+  const ready = document.querySelector(".card[data-order='"+cssEsc(orderId)+"'] .ready");
+  await markReady(orderId, ready, { skipConfirm:true });
 }
 
 function markFactor(inp){ const v=parseFloat(inp.value); inp.classList.toggle('diff', !isNaN(v) && v!==1); }
