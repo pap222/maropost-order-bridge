@@ -50,6 +50,25 @@
   .instr { margin:0; padding:8px 16px; background:#fff8e1; color:#8a6d00; font-size:12px; border-bottom:1px solid var(--line); }
   .searchnote { margin:0 0 12px; padding:8px 14px; background:#e8f0fe; color:#1a4480; font-size:13px; border-radius:6px; }
   .searchnote a { color:#1565c0; }
+  /* Login pop-up + the persistent "to map" banner */
+  .modal-bg { position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; z-index:50; }
+  .modal { background:#fff; border-radius:12px; width:min(680px,92vw); max-height:85vh; display:flex; flex-direction:column; box-shadow:0 10px 40px rgba(0,0,0,.3); }
+  .modal-head { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid var(--line); font-size:17px; font-weight:700; }
+  .modal-x { background:none; color:#888; font-size:18px; padding:2px 8px; }
+  .modal-body { padding:14px 18px; overflow:auto; }
+  .modal-foot { display:flex; gap:10px; justify-content:flex-end; padding:14px 18px; border-top:1px solid var(--line); flex-wrap:wrap; }
+  .um-ok { font-size:15px; color:#1b5e20; }
+  .um-warn { font-size:14px; color:#8a4b00; margin:0 0 10px; }
+  ul.um-list { list-style:none; margin:0; padding:0; }
+  ul.um-list li { padding:8px 0; border-bottom:1px solid #f0f0f0; font-size:13px; }
+  ul.um-list a { color:#1565c0; text-decoration:none; }
+  ul.um-list .miss { color:#b71c1c; font-weight:700; }
+  ul.um-list .who { color:#777; }
+  .tomap-card { margin:0 0 14px; padding:10px 14px; border-radius:8px; font-size:13px; }
+  .tomap-card.warn { background:#fff8e1; border:1px solid #ffe082; color:#7a5b00; }
+  .tomap-card.ok { background:#e8f5e9; border:1px solid #a5d6a7; color:#1b5e20; }
+  .tomap-card a { color:#1565c0; cursor:pointer; }
+  .pushall.sm { padding:5px 10px; font-size:13px; }
   main { padding:20px; max-width:1100px; margin:0 auto; }
   .card { background:#fff; border:1px solid var(--line); border-radius:10px; margin-bottom:18px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.06); }
   .card h2 { font-size:16px; margin:0; padding:12px 16px; background:#fafafa; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
@@ -120,6 +139,21 @@
   <h3>Activity log</h3>
   <div id="log"></div>
 </main>
+
+<!-- Login pop-up: what's unmatched across the To-process orders -->
+<div id="unmatchedModal" class="modal-bg" style="display:none">
+  <div class="modal">
+    <div class="modal-head">
+      <span id="umTitle">Orders needing attention</span>
+      <button class="modal-x" onclick="closeUnmatched()">✕</button>
+    </div>
+    <div id="umBody" class="modal-body"></div>
+    <div class="modal-foot">
+      <button class="primary" onclick="closeUnmatched()">Start mapping</button>
+      <button class="pushall" id="umPushAll" onclick="closeUnmatched(); pushAll();">Push all confirmed → QuickB2B</button>
+    </div>
+  </div>
+</div>
 </div>
 
 <script>
@@ -129,7 +163,9 @@ let TOKEN = sessionStorage.getItem("rt") || "";
 function log(msg, cls="") { const el=$("#log"); el.textContent += (cls==="err"?"✗ ":"• ")+msg+"\n"; el.scrollTop=el.scrollHeight; }
 
 function show(view){ $("#gate").style.display = view==="gate"?"block":"none"; $("#app").style.display = view==="app"?"block":"none"; }
-function login(){ TOKEN=$("#pw").value; sessionStorage.setItem("rt",TOKEN); show("app"); loadOrders(); }
+// Set when the user (re)opens the app, so the unmatched pop-up shows once.
+let popupOnLoad = false;
+function login(){ TOKEN=$("#pw").value; sessionStorage.setItem("rt",TOKEN); show("app"); popupOnLoad=true; loadOrders(); }
 function logout(){ sessionStorage.removeItem("rt"); TOKEN=""; show("gate"); }
 
 async function api(path, opts={}) {
@@ -219,6 +255,11 @@ async function loadOrders(){
     if (!data.orders.length){ $("#orders").innerHTML = "<p>"+(empties[VIEW]||"Nothing here.")+"</p>"; return; }
     data.orders.forEach(o => { ORDERS[o.order_id] = o; });
     $("#orders").innerHTML = data.orders.map(renderCard).join("");
+    // On the To-process board: persistent "to map" banner + a once-per-login pop-up.
+    if(VIEW==="active"){
+      $("#orders").insertAdjacentHTML("afterbegin", tomapCardHTML(data.orders));
+      if(popupOnLoad){ popupOnLoad=false; showUnmatchedModal(data.orders); }
+    }
     log(`Loaded ${data.orders.length} ${VIEW} orders`);
   } catch(e){ if(e.message!=="unauthorized") $("#orders").innerHTML="<p class='msg err'>"+e.message+"</p>"; }
 }
@@ -301,6 +342,60 @@ async function serverSearch(q){
   }catch(e){ if(e.message!=="unauthorized") $("#orders").innerHTML="<p class='msg err'>"+e.message+"</p>"; }
 }
 function clearSearch(){ $("#search").value=""; loadOrders(); }
+
+// --- "unmatched" summary (login pop-up + persistent banner) ----------------
+// Returns the To-process orders that still have unmapped lines, with the names.
+function unmatchedList(orders){
+  return (orders||[]).filter(o => (o.unmapped_count||0) > 0).map(o => ({
+    id: o.order_id,
+    name: (o.customer && o.customer.name) || "",
+    count: o.unmapped_count || 0,
+    items: (o.lines||[]).filter(l => !l.mapped).map(l => l.product_name || l.sku),
+  }));
+}
+function unmatchedRowsHTML(list){
+  return list.map(u => `<li>
+    <a onclick="jumpToOrder('${esc(u.id)}')"><b>#${esc(u.id)}</b></a>
+    <span class="who">${esc(u.name)}</span> —
+    <span class="miss">${u.count} unmatched:</span> ${esc(u.items.join(", "))}</li>`).join("");
+}
+// Slim persistent banner at the top of the To-process list.
+function tomapCardHTML(orders){
+  const list = unmatchedList(orders);
+  if(!list.length){
+    return `<div class="tomap-card ok">✓ All ${orders.length} order${orders.length===1?"":"s"} fully mapped — ready to <a onclick="pushAll()">Push all confirmed → QuickB2B</a>.</div>`;
+  }
+  const total = list.reduce((s,u)=>s+u.count,0);
+  return `<div class="tomap-card warn">⚠ <b>${total} unmatched line${total===1?"":"s"}</b> across ${list.length} order${list.length===1?"":"s"} need a QuickB2B item (use a MISC code if there's no exact match) before they can be pushed. <a onclick="showUnmatchedModal(Object.values(ORDERS))">Review</a></div>`;
+}
+// The login pop-up.
+function showUnmatchedModal(orders){
+  const list = unmatchedList(orders);
+  const total = list.reduce((s,u)=>s+u.count,0);
+  const body = $("#umBody"), title = $("#umTitle"), pushBtn = $("#umPushAll");
+  if(!list.length){
+    title.textContent = "All mapped — ready to push";
+    body.innerHTML = `<p class="um-ok">✓ Every To-process order is fully mapped. You can push them all to QuickB2B now.</p>`;
+    if(pushBtn) pushBtn.style.display = "";
+  } else {
+    title.textContent = `${total} unmatched line${total===1?"":"s"} to map`;
+    body.innerHTML = `<p class="um-warn">These lines have no QuickB2B item yet. Map each one (use a <b>MISC</b> code if there's no exact match) — nothing pushes until every line is mapped.</p>
+      <ul class="um-list">${unmatchedRowsHTML(list)}</ul>`;
+    if(pushBtn) pushBtn.style.display = "none"; // don't offer push-all while lines are unmatched
+  }
+  $("#unmatchedModal").style.display = "flex";
+}
+function closeUnmatched(){ $("#unmatchedModal").style.display = "none"; }
+// Expand a card and scroll to it (used by the pop-up / banner links).
+function jumpToOrder(id){
+  closeUnmatched();
+  const card = $(".card[data-order='"+cssEsc(id)+"']");
+  if(!card) return;
+  card.classList.remove("collapsed");
+  card.scrollIntoView({ behavior:"smooth", block:"start" });
+  card.style.outline = "3px solid #ffb300";
+  setTimeout(()=>{ card.style.outline = ""; }, 1600);
+}
 // Filter the Completed table rows by order # / customer / shipping.
 function filterCompleted(q){
   q = String(q||"").trim().toLowerCase();
@@ -822,7 +917,7 @@ const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&
 const cssEsc = s => String(s).replace(/'/g,"\\'");
 
 // boot
-if(TOKEN){ show("app"); loadOrders(); } else { show("gate"); }
+if(TOKEN){ show("app"); popupOnLoad=true; loadOrders(); } else { show("gate"); }
 </script>
 </body>
 </html>
