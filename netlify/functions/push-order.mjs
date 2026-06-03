@@ -39,7 +39,7 @@ export default async (req) => {
     if (result.ok) {
       const invoice = qb2bInvoiceNo(result.data);
       await markSynced(orderId, testMode ? "test" : "created", payload, invoice);
-      return json({ ok: true, testMode: !!testMode, qb2b: result.data, qb2b_invoice: invoice, unmapped });
+      return json({ ok: true, testMode: !!testMode, qb2b: result.data, qb2b_invoice: invoice, delivery_date: payload.delivery_date || "", unmapped });
     }
     return json({
       ok: false,

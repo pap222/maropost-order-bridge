@@ -730,7 +730,8 @@ async function pushOne(orderId, btn, opts={}){
       const sentLabel = inv ? `Sent to QuickB2B inv ${inv}` : "Sent to QuickB2B";
       msg.textContent = r.already ? "already pushed" : (testMode()? "TEST ok ✓" : `${sentLabel} ✓`);
       msg.className="msg ok";
-      log(`#${orderId} ${r.already?'already synced':(testMode()?'TEST pushed':(inv?`SENT TO QUICKB2B inv ${inv}`:'SENT TO QUICKB2B'))}${r.unmapped&&r.unmapped.length?' (flagged: '+r.unmapped.join(', ')+')':''}`);
+      const dd = r.delivery_date ? ` — delivery date ${r.delivery_date}` : "";
+      log(`#${orderId} ${r.already?'already synced':(testMode()?'TEST pushed':(inv?`SENT TO QUICKB2B inv ${inv}`:'SENT TO QUICKB2B'))}${dd}${r.unmapped&&r.unmapped.length?' (flagged: '+r.unmapped.join(', ')+')':''}`);
       // Pop the Maropost invoice for printing. Skipped during "Push all" (browsers
       // block many pop-ups at once) — use the per-order 🖨 Invoice button there.
       if(!opts.fromAll && !r.already) openInvoice(orderId);
