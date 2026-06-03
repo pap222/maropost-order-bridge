@@ -18,6 +18,7 @@
   button.pushall { background:#1565c0; color:#fff; }
   button.saveall { background:#607d8b; color:#fff; }
   button.invoice { background:#455a64; color:#fff; }
+  button.label { background:#5d4037; color:#fff; }
   button.refund { background:#ad1457; color:#fff; }
   button.ready { background:#00897b; color:#fff; }
   button:disabled { opacity:.5; cursor:not-allowed; }
@@ -317,6 +318,7 @@ function invoiceHTML(o){
     <td class="r">${money(l.unit_price)}</td><td class="r">0.00%</td><td class="r">${money(l.line_total)}</td></tr>`;
   }).join("");
   const refund = Number(o.refund_total||0);
+  const rf = o._refund || null; // set after a successful refund -> "REFUND ISSUED" stamp
 
   // Totals breakdown mirrors Maropost's Tax Invoice: product subtotal, shipping,
   // 2.2% card surcharge, GST (already included in the prices), grand total, then
@@ -353,6 +355,7 @@ function invoiceHTML(o){
     .paid{display:inline-block;margin-top:4px;padding:3px 10px;border-radius:4px;font-weight:bold;font-size:12px;}
     .paid.yes{background:#1b8a3a;color:#fff;} .paid.no{background:#c62828;color:#fff;}
     .mode{display:inline-block;margin:14px 0 4px;padding:5px 12px;border:2px solid #111;border-radius:4px;font-weight:bold;font-size:15px;}
+    .refbanner{margin:10px 0;padding:8px 14px;border-radius:6px;font-weight:bold;font-size:14px;background:#fdecea;color:#b71c1c;border:1px solid #f5b5b0;}
     .cols{display:flex;gap:24px;margin:12px 0;}
     .col{flex:1;} .col h3{margin:0 0 4px;font-size:12px;text-transform:uppercase;color:#666;letter-spacing:.5px;}
     .col .body{line-height:1.5;}
@@ -387,6 +390,10 @@ function invoiceHTML(o){
 
     <div class="mode">${isPickup?'PICK UP':'DELIVERY'}${o.required_date?` &mdash; ${esc(o.required_date)}`:''}</div>
 
+    ${refund>0?`<div class="refbanner">${rf
+        ? `↩ REFUND ISSUED — ${money(rf.this_refund||refund)} returned for unavailable items${rf.stripe_refund_id?` · Stripe ${esc(rf.stripe_refund_id)}`:''}`
+        : `↩ REVISED — ${money(refund)} to be refunded for unavailable items`}</div>`:''}
+
     <div class="cols">
       <div class="col"><h3>${isPickup?'Customer (Pick Up)':'Ship To'}</h3>
         <div class="body">${isPickup?'<b>PICK UP</b><br>'+addrHTML({name:o.ship_to?.name,company:o.ship_to?.company,phone:o.ship_to?.phone},c):addrHTML(o.ship_to,c)}</div></div>
@@ -416,6 +423,55 @@ function openInvoice(orderId){
   const w = window.open("", "wfs_invoice_"+orderId);
   if(!w){ alert("Pop-up blocked — allow pop-ups for this site to print invoices."); return; }
   w.document.open(); w.document.write(invoiceHTML(o)); w.document.close(); w.focus();
+  setTimeout(()=>{ try{ w.print(); }catch(e){} }, 350);
+}
+
+// Big, warehouse-readable packing label. Pickups show the name + a PICK UP
+// banner (no address); deliveries show the name + full delivery address.
+function labelHTML(o){
+  const c = o.customer || {};
+  const st = o.ship_to || {};
+  const pickup = isPickupShip(o.shipping);
+  const name = st.name || c.name || "";
+  const phone = st.phone || c.phone || "";
+  const addrLines = [];
+  if(st.company && st.company!==name) addrLines.push(esc(st.company));
+  (st.lines||[]).forEach(l=>{ if(l) addrLines.push(esc(l)); });
+  const addr = addrLines.join("<br>") || '<span style="color:#999">address on file</span>';
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Label ${esc(o.order_id)}</title>
+  <style>
+    @page{margin:8mm;}
+    *{font-family:Arial,Helvetica,sans-serif;box-sizing:border-box;}
+    body{margin:0;color:#111;}
+    .lab{border:3px solid #111;border-radius:12px;padding:20px 24px;max-width:560px;}
+    .ord{float:right;font-size:15px;color:#555;font-weight:700;}
+    .mode{display:inline-block;font-size:26px;font-weight:900;letter-spacing:1px;padding:6px 18px;border-radius:8px;color:#fff;}
+    .mode.pickup{background:#00897b;} .mode.delivery{background:#ef6c00;}
+    .name{font-size:42px;font-weight:900;line-height:1.05;margin:18px 0 8px;}
+    .addr{font-size:22px;line-height:1.4;}
+    .ph{font-size:22px;font-weight:700;margin-top:10px;}
+    .req{margin-top:14px;font-size:16px;color:#333;}
+    .req b{color:#000;}
+  </style></head><body>
+    <div class="lab">
+      <span class="ord">#${esc(o.order_id)}</span>
+      <span class="mode ${pickup?'pickup':'delivery'}">${pickup?'🏪 PICK UP':'🚚 DELIVERY'}</span>
+      <div class="name">${esc(name)}</div>
+      ${pickup
+        ? `<div class="addr"><b>Ready for collection in store</b></div>`
+        : `<div class="addr">${addr}</div>`}
+      ${phone?`<div class="ph">☎ ${esc(phone)}</div>`:''}
+      ${o.required_date?`<div class="req">📅 <b>${esc(o.required_date)}</b></div>`:''}
+      ${o.instructions?`<div class="req">📝 ${esc(o.instructions)}</div>`:''}
+    </div>
+  </body></html>`;
+}
+function openLabel(orderId){
+  const o = ORDERS[orderId];
+  if(!o){ alert("Reload the page, then try Label again."); return; }
+  const w = window.open("", "wfs_label_"+orderId);
+  if(!w){ alert("Pop-up blocked — allow pop-ups for this site to print labels."); return; }
+  w.document.open(); w.document.write(labelHTML(o)); w.document.close(); w.focus();
   setTimeout(()=>{ try{ w.print(); }catch(e){} }, 350);
 }
 
@@ -465,6 +521,7 @@ function renderCard(o){
       ${VIEW==="active" ? `
       <button class="saveall" onclick="saveAll('${esc(o.order_id)}', this)">Save all mappings</button>
       <button class="push" onclick="pushOne('${esc(o.order_id)}', this)" ${o.synced||needsMap?'disabled':''} title="${needsMap?'Map every line first (use a MISC code if needed)':''}">Confirm & Push</button>` : ''}
+      <button class="label" onclick="openLabel('${esc(o.order_id)}')" title="Print the packing label (name + pick up / delivery address)">🏷 Label</button>
       <button class="invoice" onclick="openInvoice('${esc(o.order_id)}')">🖨 Invoice</button>
       <button class="refund" onclick="doRefund('${esc(o.order_id)}', this)" ${o.refund_total>0?'':'disabled'}>↩ Refund <span class="ramt">${money(o.refund_total||0)}</span></button>
       ${VIEW==="active" ? `
@@ -629,7 +686,14 @@ async function sendRefund(orderId, btn, msg, stripeId){
       msg.textContent = r.already ? `already refunded ${money(r.refunded)}` : `refunded ${money(r.refunded)} ✓`;
       msg.className="msg ok";
       log(`#${orderId} REFUNDED ${money(r.refunded)}${r.stripe_refund_id?" ("+r.stripe_refund_id+")":""}${r.matched_by?" ["+r.matched_by+"]":""}${r.already?" [already]":""}`);
-      if(r.docket) openRefundDocket(r.docket);
+      if(r.docket){
+        // Stamp the cached order so the revised invoice shows "REFUND ISSUED",
+        // then print BOTH: the revised invoice (customer copy) + credit note (accounts).
+        const o2 = ORDERS[orderId];
+        if(o2){ o2._refund = r.docket; }
+        openInvoice(orderId);
+        openRefundDocket(r.docket);
+      }
       return;
     }
     if(r.needStripeId){
