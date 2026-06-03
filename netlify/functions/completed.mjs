@@ -19,6 +19,11 @@ export default async (req) => {
     }));
     return json({ count: orders.length, orders });
   } catch (e) {
-    return json({ error: e.message }, 500);
+    // Most likely cause: the fulfilled_orders table hasn't been created yet.
+    const msg = String(e.message || "");
+    if (/relation|does not exist|42P01|could not find the table|schema cache/i.test(msg)) {
+      return json({ setup: true, orders: [], error: msg });
+    }
+    return json({ error: msg }, 500);
   }
 };

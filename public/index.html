@@ -48,6 +48,8 @@
   .card.pickup   .modepill { background:#b2dfdb; color:#00564e; }
   .card.delivery .modepill { background:#ffe0b2; color:#b34700; }
   .instr { margin:0; padding:8px 16px; background:#fff8e1; color:#8a6d00; font-size:12px; border-bottom:1px solid var(--line); }
+  .searchnote { margin:0 0 12px; padding:8px 14px; background:#e8f0fe; color:#1a4480; font-size:13px; border-radius:6px; }
+  .searchnote a { color:#1565c0; }
   main { padding:20px; max-width:1100px; margin:0 auto; }
   .card { background:#fff; border:1px solid var(--line); border-radius:10px; margin-bottom:18px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.06); }
   .card h2 { font-size:16px; margin:0; padding:12px 16px; background:#fafafa; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
@@ -99,8 +101,9 @@
   <label class="ctl"><input type="checkbox" id="testMode" checked /> Test mode (no real order)</label>
   <label class="ctl auto"><input type="checkbox" id="autoMode" onchange="saveAuto(this)" /> <b>Automate</b> (cron pushes every 5 min)</label>
   <span id="autoState" class="ctl"></span>
-  <input id="search" class="search" placeholder="🔎 name or order #" oninput="onSearchInput()" onkeydown="if(event.key==='Enter')searchOrders()" />
+  <input id="search" class="search" placeholder="🔎 name or order # (searches everything)" oninput="onSearchInput()" onkeydown="if(event.key==='Enter')searchOrders()" />
   <button class="primary" onclick="searchOrders()">Search</button>
+  <label class="ctl" title="On: only filter the orders in the tab you're viewing. Off: search the whole database."><input type="checkbox" id="tabOnly" /> this tab only</label>
   <button class="primary" onclick="loadOrders()">↻ Reload</button>
   <button class="pushall" onclick="pushAll()">Push all confirmed</button>
   <button class="primary" onclick="logout()">Logout</button>
@@ -225,10 +228,13 @@ async function loadCompleted(){
   $("#orders").innerHTML = "<p>Loading…</p>";
   try {
     const data = await api("/api/completed");
+    if (data.setup){ $("#orders").innerHTML = "<p class='msg err'>Completed log isn’t set up yet: run <b>unavailable_refunds.sql</b> in Supabase (it creates the <code>fulfilled_orders</code> table). "+esc(data.error||"")+"</p>"; return; }
     if (data.error){ $("#orders").innerHTML = "<p class='msg err'>"+data.error+"</p>"; return; }
-    if (!data.orders.length){ $("#orders").innerHTML = "<p>Nothing completed in the last 7 days.</p>"; return; }
-    const rows = data.orders.map(o => `
-      <tr>
+    if (!data.orders.length){ $("#orders").innerHTML = "<p>Nothing completed in the last 7 days. (Orders show here once you hit “Mark dispatched / Ready for pickup”.)</p>"; return; }
+    const rows = data.orders.map(o => {
+      const rowText = `${o.order_id} ${o.customer||""} ${o.shipping||""} ${o.status||""}`.toLowerCase();
+      return `
+      <tr data-row="${esc(rowText)}">
         <td><b>#${esc(o.order_id)}</b></td>
         <td>${o.mode==="pickup"?"🏪 Pickup":"🚚 Delivery"}</td>
         <td>${esc(o.status||"")}</td>
@@ -236,7 +242,8 @@ async function loadCompleted(){
         <td>${esc(o.shipping||"")}</td>
         <td>${money(o.total||0)}</td>
         <td>${esc(fmtWhen(o.fulfilled_at))}</td>
-      </tr>`).join("");
+      </tr>`;
+    }).join("");
     $("#orders").innerHTML = `<div class="card"><table>
       <thead><tr><th>Order</th><th>Type</th><th>Status</th><th>Customer</th><th>Shipping</th><th>Total</th><th>Marked ready</th></tr></thead>
       <tbody>${rows}</tbody></table>
@@ -249,7 +256,7 @@ function fmtWhen(iso){ if(!iso) return ""; const d=new Date(iso); return isNaN(d
 
 // --- search ---------------------------------------------------------------
 // Live filter of the cards already on the page, by order # or customer name.
-function onSearchInput(){ filterCards($("#search").value); }
+function onSearchInput(){ const q=$("#search").value; if(VIEW==="completed") filterCompleted(q); else filterCards(q); }
 function filterCards(q){
   q = String(q||"").trim().toLowerCase();
   let shown = 0;
@@ -262,25 +269,44 @@ function filterCards(q){
   });
   return shown;
 }
-// Enter / Search button: filter what's loaded; if it's an order number with no
-// local match, look it up on the server (works for older orders too).
+// Enter / Search button. Default: search the WHOLE database (all statuses) by
+// name / email / order # on the server. With "this tab only" ticked, it just
+// filters the cards already loaded in the current tab.
 async function searchOrders(){
   const q = $("#search").value.trim();
-  if(!q){ filterCards(""); return; }
-  const shown = filterCards(q);
-  const looksLikeNumber = /^N?\d+$/i.test(q);
-  if(shown>0 || !looksLikeNumber) return;
-  // No local match and it's an order number -> server lookup.
-  $("#orders").innerHTML = "<p>Searching order "+esc(q)+"…</p>";
+  if(!q){ filterCards(""); if(VIEW==="completed") filterCompleted(""); return; }
+  // "This tab only" -> local filter of what's on screen (incl. Completed table).
+  if($("#tabOnly") && $("#tabOnly").checked){
+    if(VIEW==="completed"){ filterCompleted(q); return; }
+    const shown = filterCards(q);
+    if(shown===0 && /^N?\d+$/i.test(q)) return serverSearch(q); // fall back to a direct lookup
+    return;
+  }
+  return serverSearch(q);
+}
+
+// Whole-database search: ask the server for any matching order (active, ready,
+// dispatched…) and render them as cards regardless of which tab we're on.
+async function serverSearch(q){
+  $("#orders").innerHTML = "<p>Searching all orders for “"+esc(q)+"”…</p>";
   await loadQbItems();
   try{
-    const data = await api("/api/orders?id="+encodeURIComponent(q));
+    const data = await api("/api/orders?q="+encodeURIComponent(q));
     if(data.error){ $("#orders").innerHTML = "<p class='msg err'>"+data.error+"</p>"; return; }
-    if(!data.orders.length){ $("#orders").innerHTML = "<p>No order found for “"+esc(q)+"”. (Search by name only matches loaded orders.)</p>"; return; }
+    if(!data.orders.length){ $("#orders").innerHTML = "<p>No orders found for “"+esc(q)+"” across the whole database.</p>"; return; }
     data.orders.forEach(o => { ORDERS[o.order_id] = o; });
-    $("#orders").innerHTML = data.orders.map(renderCard).join("");
-    log(`Found order ${data.orders[0].order_id}`);
+    $("#orders").innerHTML = `<p class="searchnote">🔎 ${data.orders.length} result${data.orders.length===1?"":"s"} for “${esc(q)}” (whole database) · <a href="#" onclick="clearSearch();return false;">clear</a></p>`
+      + data.orders.map(renderCard).join("");
+    log(`Search “${q}” → ${data.orders.length} orders`);
   }catch(e){ if(e.message!=="unauthorized") $("#orders").innerHTML="<p class='msg err'>"+e.message+"</p>"; }
+}
+function clearSearch(){ $("#search").value=""; loadOrders(); }
+// Filter the Completed table rows by order # / customer / shipping.
+function filterCompleted(q){
+  q = String(q||"").trim().toLowerCase();
+  document.querySelectorAll("#orders tr[data-row]").forEach(tr => {
+    tr.style.display = (!q || tr.dataset.row.includes(q)) ? "" : "none";
+  });
 }
 
 // Maropost's invoice printout can't be deep-linked (it's a session/POST page),
