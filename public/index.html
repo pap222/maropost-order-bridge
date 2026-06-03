@@ -589,13 +589,16 @@ function labelHTML(o){
     </div>
   </body></html>`;
 }
-// --- Zebra label (ZPL via Zebra Browser Print) ----------------------------
-// The roll is 100 x 70 mm. Desktop Zebras are usually 203 dpi (8 dots/mm), so
-// 100mm = 800 dots wide and 70mm = 560 dots tall. If labels print too small or
-// too large for the media, change LABEL_DPMM (a 300 dpi printer uses 11.8).
-const LABEL_DPMM = 8;
-const LABEL_W = Math.round(100 * LABEL_DPMM); // dots across (800 @ 203dpi)
-const LABEL_H = Math.round(70  * LABEL_DPMM); // dots down   (560 @ 203dpi)
+// --- Zebra label (ZPL) -----------------------------------------------------
+// Same print contract as the PACKR app: a small Zebra print server on the LAN
+// accepts ZPL via POST https://<host>:9090/write with {device:{uid:"network"}}.
+// Settings (host + label size) live in localStorage "printSettings" so they
+// match PACKR; defaults are the 192.168.0.42 server and the 100x70mm roll.
+const PRINT_DEF = { serverHost:"192.168.0.42", labelW:799, labelH:559 };
+function getPrintSettings(){
+  try{ const s = JSON.parse(localStorage.getItem("printSettings")||"null"); return s ? {...PRINT_DEF, ...s} : {...PRINT_DEF}; }
+  catch(e){ return {...PRINT_DEF}; }
+}
 
 // Customer text can contain ^ or ~ which are ZPL control chars — strip them so
 // a name/address can never break the label format.
@@ -611,6 +614,8 @@ function zplLabel(o){
   const lines=[];
   if(st.company && st.company!==(st.name||c.name)) lines.push(zplEsc(st.company));
   (st.lines||[]).forEach(l=>{ if(l) lines.push(zplEsc(l)); });
+  const ps = getPrintSettings();
+  const LABEL_W = ps.labelW, LABEL_H = ps.labelH;
   const W = LABEL_W - 40; // usable width inside a 20-dot margin each side
   const z=[];
   z.push("^XA");
@@ -635,56 +640,31 @@ function zplLabel(o){
   return z.join("\n");
 }
 
-// Zebra Browser Print runs a small web service that the browser talks to. Here
-// it lives on the print-server host 192.168.0.42 (override without a redeploy by
-// running localStorage.setItem('labelHost','x.x.x.x') in the console). We try
-// that host first, then localhost. From an HTTPS page we must use the HTTPS port
-// (9101) or the browser blocks the call as mixed content.
-const LABEL_HOST = (()=>{ try{ return localStorage.getItem("labelHost") || "192.168.0.42"; }catch{ return "192.168.0.42"; } })();
-function zbpBases(){
-  const https = location.protocol==="https:";
-  const proto = https ? "https" : "http";
-  const port  = https ? 9101 : 9100;
-  return [...new Set([LABEL_HOST, "127.0.0.1"])].map(h => `${proto}://${h}:${port}`);
-}
-// Try each Browser Print host in turn; return the first that answers.
-async function zbpFetch(path, init){
-  let lastErr;
-  for(const base of zbpBases()){
-    try{
-      const r = await fetch(base+path, init);
-      if(r.ok) return r;
-      lastErr = new Error("HTTP "+r.status);
-    }catch(e){ lastErr = e; }
-  }
-  throw lastErr || new Error("Browser Print not reachable");
-}
-async function zbpDefaultDevice(){
-  const r = await zbpFetch("/default?type=printer", { cache:"no-store" });
-  let dev=null; try{ dev=JSON.parse(await r.text()); }catch{}
-  if(!dev || !dev.uid) throw new Error("no default Zebra printer selected in Browser Print");
-  return dev;
-}
-async function zbpPrint(zpl){
-  const device = await zbpDefaultDevice();
-  await zbpFetch("/write", {
-    method:"POST", headers:{ "Content-Type":"application/json" },
-    body: JSON.stringify({ device, data: zpl }),
-  });
+// Send ZPL to the LAN Zebra print server, exactly like PACKR's sendZPL.
+// Returns true on success, false on any failure (so the caller can fall back).
+async function sendZPL(zpl){
+  const ps = getPrintSettings();
+  try{
+    const r = await fetch(`https://${ps.serverHost}:9090/write`, {
+      method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ device:{ uid:"network" }, data: zpl }),
+    });
+    return r.ok;
+  }catch(e){ return false; }
 }
 
-// Print a label: send ZPL straight to the Zebra via Browser Print; if that
-// isn't running/reachable, fall back to the printable HTML page (any printer).
+// Print a label: send ZPL to the Zebra print server; if it isn't reachable,
+// fall back to the printable HTML page (any printer).
 async function openLabel(orderId){
   const o = ORDERS[orderId];
   if(!o){ alert("Reload the page, then try Label again."); return; }
   let printed=false;
-  try{
-    await zbpPrint(zplLabel(o));
-    log("#"+orderId+" label sent to Zebra");
+  const sent = await sendZPL(zplLabel(o));
+  if(sent){
+    log("#"+orderId+" label sent to Zebra ("+getPrintSettings().serverHost+")");
     printed=true;
-  }catch(e){
-    log("Zebra Browser Print unavailable ("+e.message+") — opening printable label instead","err");
+  } else {
+    log("Zebra print server not reachable at "+getPrintSettings().serverHost+":9090 — opening printable label instead","err");
     const w = window.open("", "wfs_label_"+orderId);
     if(!w){ alert("Pop-up blocked — allow pop-ups for this site to print labels."); return; }
     w.document.open(); w.document.write(labelHTML(o)); w.document.close(); w.focus();
