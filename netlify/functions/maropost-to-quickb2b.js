@@ -16,10 +16,14 @@
 //   REVIEW_PASSWORD (for the page), QB2B_TEST_MODE ("1" = test endpoint),
 //   AUTO_MODE ("1" = let this cron run).
 
-import { cfg, isAutoMode, loadItemMap, fetchWebsiteOrders, syncedSet, buildPayload, createQb2bOrder, markSynced } from "../../lib/bridge.mjs";
+import { cfg, isAutoMode, loadItemMap, fetchWebsiteOrders, syncedSet, buildPayload, createQb2bOrder, markSynced, purgeOldFulfilled } from "../../lib/bridge.mjs";
 
 export default async function handler() {
   const c = cfg();
+  // Housekeeping (runs in both manual and auto mode): drop Completed-tab rows
+  // older than a week. The permanent record stays in Maropost.
+  try { await purgeOldFulfilled(7); } catch { /* non-fatal */ }
+
   if (!(await isAutoMode())) {
     const msg = { skippedAll: true, reason: "Automation OFF - manual review mode (toggle on the review page or set AUTO_MODE=1)" };
     console.log("maropost->qb2b", JSON.stringify(msg));

@@ -22,3 +22,19 @@ create table if not exists refunds (
 );
 
 create index if not exists refunds_order_idx on refunds (maropost_order_id);
+
+-- Rolling "Completed" working list for the dashboard. One row per order that's
+-- been marked ready (status changed in Maropost, customer SMS fired). This is
+-- NOT the system of record - Maropost is - so the cron auto-purges rows older
+-- than a week (purgeOldFulfilled).
+create table if not exists fulfilled_orders (
+  maropost_order_id text primary key,
+  mode              text,                 -- 'pickup' | 'delivery'
+  status            text,                 -- e.g. 'Pending Pickup' | 'Dispatched'
+  customer          text,
+  shipping          text,
+  total             numeric(10,2) not null default 0,
+  fulfilled_at      timestamptz not null default now()
+);
+
+create index if not exists fulfilled_orders_at_idx on fulfilled_orders (fulfilled_at);

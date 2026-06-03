@@ -10,6 +10,8 @@ import pushFn from "./netlify/functions/push-order.mjs";
 import settingsFn from "./netlify/functions/settings.mjs";
 import unavailableFn from "./netlify/functions/set-unavailable.mjs";
 import refundFn from "./netlify/functions/refund.mjs";
+import markReadyFn from "./netlify/functions/mark-ready.mjs";
+import completedFn from "./netlify/functions/completed.mjs";
 
 const ROUTES = {
   "/api/orders": ordersFn,
@@ -18,6 +20,8 @@ const ROUTES = {
   "/api/settings": settingsFn,
   "/api/set-unavailable": unavailableFn,
   "/api/refund": refundFn,
+  "/api/mark-ready": markReadyFn,
+  "/api/completed": completedFn,
 };
 const PORT = 8910;
 
