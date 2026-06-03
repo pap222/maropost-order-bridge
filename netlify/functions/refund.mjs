@@ -33,7 +33,13 @@ export default async (req) => {
       return json({ ok: true, already: true, refunded: already, message: `Already refunded $${already.toFixed(2)}` });
     }
 
-    const pay = await findStripePayment(orderId, stripeId);
+    // Pass the order total + customer so Stripe can be located by amount + payer
+    // (a much stronger signal than the description for this gateway setup).
+    const pay = await findStripePayment(orderId, stripeId, {
+      amountCents: Math.round(Number(r.grand_total || 0) * 100),
+      name: r.customer?.name,
+      email: r.customer?.email,
+    });
     if (!pay) {
       return json({
         error: `Couldn't auto-find the Stripe payment for order ${orderId}. ` +
