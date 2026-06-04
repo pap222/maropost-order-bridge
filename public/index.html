@@ -46,6 +46,7 @@
   /* Standout customer name + colour-coded pickup vs delivery */
   .card h2 .ordno { font-size:13px; color:#9aa0a6; font-weight:700; }
   .card h2 .cname { font-size:20px; font-weight:800; color:#0d0d0d; letter-spacing:.2px; }
+  .card h2 .subname { font-size:12px; font-weight:600; color:#6b7280; margin-left:6px; }
   .modepill { font-size:12px; font-weight:800; padding:3px 11px; border-radius:999px; text-transform:uppercase; letter-spacing:.05em; white-space:nowrap; }
   .card.pickup   { border-left:6px solid #00897b; }
   .card.delivery { border-left:6px solid #ef6c00; }
@@ -768,8 +769,9 @@ function renderCard(o){
     <h2 onclick="toggleCard(this)">
       <span class="ordno">#${esc(o.order_id)}</span>
       <span class="modepill">${modePill}</span>
-      <span class="cname">${esc(c.name)}</span>
-      ${c.company && c.company!==c.name?`<span class="badge biz">🏢 ${esc(c.company)}</span>`:''}
+      ${c.company && c.company!==c.name
+        ? `<span class="cname">🏢 ${esc(c.company)}</span>${c.name?`<span class="subname">${esc(c.name)}</span>`:''}`
+        : `<span class="cname">${esc(c.name)}</span>`}
       ${o.required_date?`<span class="badge date">📅 ${esc(o.required_date)}</span>`:''}
       ${o.synced?`<span class="badge synced">${o.qb2b_invoice?`✓ QuickB2B inv ${esc(o.qb2b_invoice)}`:'✓ Sent to QuickB2B'}</span>`:''}
       ${needsMap?`<span class="badge unmapped">${o.unmapped_count} unmapped</span>`:''}
@@ -778,7 +780,7 @@ function renderCard(o){
       <span class="chev">▼</span>
     </h2>
     <div class="cbody">
-    <div class="cust"><b>${esc(c.name)}</b> ${c.company&&c.company!==c.name?`&nbsp; <b>🏢 ${esc(c.company)}</b>`:''} &nbsp; ${esc(c.phone||'')} &nbsp; ${esc(c.address||'')} ${c.email&&c.email!==c.name?`&nbsp; <span class="note">${esc(c.email)}</span>`:''}${o.shipping?` &nbsp;·&nbsp; <b>${esc(o.shipping)}</b>`:''}</div>
+    <div class="cust">${c.company&&c.company!==c.name?`<b>🏢 ${esc(c.company)}</b>${c.name?` &nbsp; <span class="note">${esc(c.name)}</span>`:''}`:`<b>${esc(c.name)}</b>`} &nbsp; ${esc(c.phone||'')} &nbsp; ${esc(c.address||'')} ${c.email&&c.email!==c.name?`&nbsp; <span class="note">${esc(c.email)}</span>`:''}${o.shipping?` &nbsp;·&nbsp; <b>${esc(o.shipping)}</b>`:''}</div>
     ${needsMap?`<p class="instr">⚠ Map every line to a QuickB2B item before pushing. If there's no exact match, use a <b>MISC</b> code (e.g. MISC) — the product name is sent as the line note.</p>`:''}
     <table>
       <thead><tr><th>Product</th><th>Ordered</th><th>QuickB2B item</th><th>× factor</th><th>= qty</th><th>Stock</th><th></th></tr></thead>
