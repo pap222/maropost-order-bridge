@@ -401,7 +401,12 @@ function showUnmatchedModal(orders){
   const list = unmatchedList(orders);
   const total = list.reduce((s,u)=>s+u.count,0);
   const body = $("#umBody"), title = $("#umTitle"), pushBtn = $("#umPushAll");
+  // Anything still waiting to go to QuickB2B (not yet synced).
+  const toPush = (orders||[]).filter(o => !o.synced);
   if(!list.length){
+    // Nothing unmatched. If there's also nothing left to push, there's no
+    // action to take — don't pop the modal at all.
+    if(!toPush.length){ closeUnmatched(); return; }
     title.textContent = "All mapped — ready to push";
     body.innerHTML = `<p class="um-ok">✓ Every To-process order is fully mapped. You can push them all to QuickB2B now.</p>`;
     if(pushBtn) pushBtn.style.display = "";
