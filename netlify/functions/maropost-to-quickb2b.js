@@ -16,7 +16,7 @@
 //   REVIEW_PASSWORD (for the page), QB2B_TEST_MODE ("1" = test endpoint),
 //   AUTO_MODE ("1" = let this cron run).
 
-import { isAutoMode, loadItemMap, fetchWebsiteOrders, syncedSet, buildPayload, createQb2bOrder, markSynced, purgeOldFulfilled, notifyPackr, qb2bInvoiceNo, customerInfo, notifySlack, notifiedSet, markNotified, orderDeepLink } from "../../lib/bridge.mjs";
+import { isAutoMode, loadItemMap, fetchWebsiteOrders, syncedSet, buildPayload, createQb2bOrder, markSynced, purgeOldFulfilled, notifyPackr, qb2bInvoiceNo, customerInfo, notifySlack, notifiedSet, markNotified, orderDeepLink, notifyPackrNeedsMapping, prunePackrNeedsMapping } from "../../lib/bridge.mjs";
 
 export default async function handler() {
   // Housekeeping (runs in both manual and auto mode): drop Completed-tab rows
@@ -42,6 +42,15 @@ export default async function handler() {
     const needMap = built.filter((b) => b.unmapped.length || b.payload.OrderDetail.length === 0);
     const ready = built.filter((b) => !b.unmapped.length && b.payload.OrderDetail.length);
     summary.needsMapping = needMap.length;
+
+    // PACKR banner feed: refresh the "needs mapping" entry for every outstanding
+    // unmapped order (idempotent per id) so the eachbulk page can flag same-day
+    // pickups that would otherwise be missed. Then drop any stale (past-dated)
+    // entries. Runs in BOTH manual and auto mode.
+    for (const b of needMap) {
+      await notifyPackrNeedsMapping(b.o, b.unmapped);
+    }
+    await prunePackrNeedsMapping();
 
     // Slack alert for newly-arrived orders that need mapping. Runs in BOTH manual
     // and auto mode (you always want to know an order is waiting on a mapping).
