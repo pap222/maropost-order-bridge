@@ -54,6 +54,10 @@
   .card.delivery h2 { background:#fff7ef; }
   .card.pickup   .modepill { background:#b2dfdb; color:#00564e; }
   .card.delivery .modepill { background:#ffe0b2; color:#b34700; }
+  /* Orders due TODAY stand out from future days. */
+  .card.today { box-shadow:0 0 0 2px #2e7d32, 0 1px 3px rgba(0,0,0,.06); }
+  .card.today h2 { background:#e8f5e9; }
+  .badge.date.istoday { background:#2e7d32; color:#fff; }
   .instr { margin:0; padding:8px 16px; background:#fff8e1; color:#8a6d00; font-size:12px; border-bottom:1px solid var(--line); }
   .searchnote { margin:0 0 12px; padding:8px 14px; background:#e8f0fe; color:#1a4480; font-size:13px; border-radius:6px; }
   .searchnote a { color:#1565c0; }
@@ -769,15 +773,16 @@ function renderCard(o){
   const pickup = isPickupShip(o.shipping);
   const modePill = pickup ? '🏪 Pickup' : '🚚 Delivery';
   const summary = `${o.shipping?`${esc(o.shipping)} · `:''}${money(o.grand_total||0)}`;
+  const isToday = o.required_iso && o.required_iso===todayWagga();
   // Cards start collapsed ("squished") - click the header to expand & check.
-  return `<div class="card collapsed ${pickup?'pickup':'delivery'}" data-order="${esc(o.order_id)}">
+  return `<div class="card collapsed ${pickup?'pickup':'delivery'}${isToday?' today':''}" data-order="${esc(o.order_id)}">
     <h2 onclick="toggleCard(this)">
       <span class="ordno">#${esc(o.order_id)}</span>
       <span class="modepill">${modePill}</span>
       ${c.company && c.company!==c.name
         ? `<span class="cname">🏢 ${esc(c.company)}</span>${c.name?`<span class="subname">${esc(c.name)}</span>`:''}`
         : `<span class="cname">${esc(c.name)}</span>`}
-      ${o.required_date?`<span class="badge date">📅 ${esc(o.required_date)}</span>`:''}
+      ${o.required_date?`<span class="badge date${isToday?' istoday':''}">📅 ${esc(o.required_date)}${isToday?' · TODAY':''}</span>`:''}
       ${o.synced?`<span class="badge synced">${o.qb2b_invoice?`✓ QuickB2B inv ${esc(o.qb2b_invoice)}`:'✓ Sent to QuickB2B'}</span>`:''}
       ${needsMap?`<span class="badge unmapped">${o.unmapped_count} unmapped</span>`:''}
       <span class="badge na nacount" ${o.unavailable_count?'':'style="display:none"'}>${o.unavailable_count||0} short</span>
