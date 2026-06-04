@@ -189,10 +189,15 @@ async function bootView(){
     const box=$("#search"); if(box) box.value=q;
     await serverSearch(q.trim());
     // PACKR's home-order cards deep-link here to act on the order straight away:
-    //   &action=ship   → label + invoice + dispatch/ready (one tap)
-    //   &print=invoice → just print the invoice
+    //   &action=label   → print the label only (no text)
+    //   &action=ship    → mark dispatched/ready ONLY (texts once, no label)
+    //   &action=shipall → label + mark dispatched/ready + invoice (one hit, texts once)
+    //   &print=invoice  → print the invoice only
+    //   (no action)     → just show the order, e.g. for Mark N/A / refund
     const action = deepLinkParam("action");
-    if(/^(ship|all|done|labelinvoiceship)$/i.test(action)) autoShipFor(q.trim());
+    if(/^label$/i.test(action)) autoLabelFor(q.trim());
+    else if(/^(shipall|full|all|done|labelshipinvoice)$/i.test(action)) autoShipAllFor(q.trim());
+    else if(/^ship$/i.test(action)) autoShipFor(q.trim());
     else if(/^(1|invoice|inv|true|yes)$/i.test(deepLinkParam("print"))) autoPrintInvoiceFor(q.trim());
     return;
   }
@@ -218,11 +223,28 @@ function autoPrintInvoiceFor(q){
   if(!o){ $("#orders").innerHTML = "<p class='msg err'>No order found to print an invoice for “"+esc(q)+"”.</p>"; return; }
   printInvoiceInTab(o);
 }
-// One-tap home-order finish from PACKR: print the Zebra label, mark the order
-// dispatched / ready for pickup (the single customer SMS), then print the
-// invoice into this tab. One confirm so an accidentally-opened link can't text a
-// customer. Invoice is printed LAST because it replaces the page.
+// Print the label only (no text, no status change) — PACKR's 🏷 PRINT LABELS button.
+async function autoLabelFor(q){
+  const id = matchOrderId(q), o = id && ORDERS[id];
+  if(!o){ $("#orders").innerHTML = "<p class='msg err'>No order found to print a label for “"+esc(q)+"”.</p>"; return; }
+  await printLabels(id);
+}
+// Ship ONLY — PACKR's 📦 SHIP (no labels) button: mark the order dispatched /
+// ready for pickup (the single customer SMS), no label, no invoice. One confirm
+// so an accidentally-opened link can't text a customer.
 async function autoShipFor(q){
+  const id = matchOrderId(q), o = id && ORDERS[id];
+  if(!o){ $("#orders").innerHTML = "<p class='msg err'>No order found for “"+esc(q)+"”.</p>"; return; }
+  const pickup = isPickupShip(o.shipping);
+  const verb = pickup ? "ready for pickup" : "dispatched";
+  if(!confirm("Mark #"+id+" "+verb+" (no label)?\n\nThis texts the customer once.")) return;
+  await markReady(id, null, { skipConfirm:true });
+}
+// One-hit finish from PACKR's 🚀 LABELS + SHIP + INVOICE button: print the Zebra
+// label, mark the order dispatched / ready for pickup (the single SMS), then
+// print the invoice into this tab (last, because it replaces the page). One
+// confirm so an accidentally-opened link can't text a customer.
+async function autoShipAllFor(q){
   const id = matchOrderId(q), o = id && ORDERS[id];
   if(!o){ $("#orders").innerHTML = "<p class='msg err'>No order found for “"+esc(q)+"”.</p>"; return; }
   const pickup = isPickupShip(o.shipping);
