@@ -16,10 +16,9 @@
 //   REVIEW_PASSWORD (for the page), QB2B_TEST_MODE ("1" = test endpoint),
 //   AUTO_MODE ("1" = let this cron run).
 
-import { cfg, isAutoMode, loadItemMap, fetchWebsiteOrders, syncedSet, buildPayload, createQb2bOrder, markSynced, purgeOldFulfilled } from "../../lib/bridge.mjs";
+import { isAutoMode, loadItemMap, fetchWebsiteOrders, syncedSet, buildPayload, createQb2bOrder, markSynced, purgeOldFulfilled } from "../../lib/bridge.mjs";
 
 export default async function handler() {
-  const c = cfg();
   // Housekeeping (runs in both manual and auto mode): drop Completed-tab rows
   // older than a week. The permanent record stays in Maropost.
   try { await purgeOldFulfilled(7); } catch { /* non-fatal */ }
@@ -30,7 +29,7 @@ export default async function handler() {
     return new Response(JSON.stringify(msg), { status: 200, headers: { "Content-Type": "application/json" } });
   }
 
-  const summary = { fetched: 0, skipped: 0, created: 0, failed: 0, testMode: c.testMode, errors: [] };
+  const summary = { fetched: 0, skipped: 0, needsMapping: 0, created: 0, failed: 0, errors: [] };
   try {
     const itemMap = await loadItemMap();
     const orders = await fetchWebsiteOrders();
@@ -43,15 +42,18 @@ export default async function handler() {
       const id = String(order.OrderID);
       if (done.has(id)) { summary.skipped++; continue; }
 
-      const { payload } = buildPayload(order, itemMap);
-      if (payload.OrderDetail.length === 0) {
-        summary.failed++;
-        summary.errors.push({ id, msg: "all line items unmapped - nothing to send" });
+      const { payload, unmapped } = buildPayload(order, itemMap);
+      // Auto-send ONLY fully-mapped orders. If any line can't resolve to a
+      // QuickB2B item, leave the whole order for a human to map + push by hand
+      // (so nothing is silently part-shipped or guessed).
+      if (unmapped.length || payload.OrderDetail.length === 0) {
+        summary.needsMapping++;
+        summary.errors.push({ id, msg: `left for manual: unmapped ${unmapped.join(", ") || "(no sendable lines)"}` });
         continue;
       }
-      const result = await createQb2bOrder(payload, c.testMode);
+      const result = await createQb2bOrder(payload, false);
       if (result.ok) {
-        await markSynced(id, c.testMode ? "test" : "created", payload);
+        await markSynced(id, "created", payload);
         summary.created++;
       } else {
         summary.failed++;

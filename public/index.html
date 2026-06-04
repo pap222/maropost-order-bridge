@@ -123,8 +123,7 @@
 <div id="app" style="display:none">
 <header>
   <h1>🍎 Web Order Review</h1>
-  <label class="ctl"><input type="checkbox" id="testMode" checked /> Test mode (no real order)</label>
-  <label class="ctl auto"><input type="checkbox" id="autoMode" onchange="saveAuto(this)" /> <b>Automate</b> (cron pushes every 5 min)</label>
+  <label class="ctl auto"><input type="checkbox" id="autoMode" onchange="saveAuto(this)" /> <b>Automate</b> (cron pushes mapped orders every 5 min)</label>
   <span id="autoState" class="ctl"></span>
   <input id="search" class="search" placeholder="🔎 name or order # (searches everything)" oninput="onSearchInput()" onkeydown="if(event.key==='Enter')searchOrders()" />
   <button class="primary" onclick="searchOrders()">Search</button>
@@ -181,8 +180,6 @@ async function api(path, opts={}) {
   return res.json();
 }
 
-function testMode(){ return $("#testMode").checked; }
-
 // --- QuickB2B catalogue (static snapshot: public/qb2b-items.json) ----------
 let QBITEMS = null; // Map code -> name
 async function loadQbItems(){
@@ -227,7 +224,7 @@ function setAutoUI(on){
 }
 async function saveAuto(cb){
   const on = cb.checked;
-  if(on && !confirm("Turn ON automation?\n\nThe cron will push paid web orders to QuickB2B every 5 minutes with NO manual review.\n\n(Reminder: also confirm Test mode is set the way you want on the server.)")){
+  if(on && !confirm("Turn ON automation?\n\nThe cron will push paid web orders that are FULLY mapped to QuickB2B every 5 minutes with NO manual review.\n\nAny order with an unmapped line is left for you to map and push by hand.")){
     cb.checked=false; return;
   }
   try{
@@ -865,21 +862,21 @@ async function saveAll(orderId, btn){
 async function pushOne(orderId, btn, opts={}){
   const msg = $(".msg", btn.parentElement); msg.textContent="pushing…"; msg.className="msg"; btn.disabled=true;
   try{
-    const r = await api("/api/push-order",{ method:"POST", body: JSON.stringify({ orderId, testMode: testMode() }) });
+    const r = await api("/api/push-order",{ method:"POST", body: JSON.stringify({ orderId }) });
     if(r.ok){
       const inv = r.qb2b_invoice || "";
       const sentLabel = inv ? `Sent to QuickB2B inv ${inv}` : "Sent to QuickB2B";
-      msg.textContent = r.already ? "already pushed" : (testMode()? "TEST ok ✓" : `${sentLabel} ✓`);
+      msg.textContent = r.already ? "already pushed" : `${sentLabel} ✓`;
       msg.className="msg ok";
       const dd = r.delivery_date ? ` — delivery date ${r.delivery_date}` : "";
-      log(`#${orderId} ${r.already?'already synced':(testMode()?'TEST pushed':(inv?`SENT TO QUICKB2B inv ${inv}`:'SENT TO QUICKB2B'))}${dd}${r.unmapped&&r.unmapped.length?' (flagged: '+r.unmapped.join(', ')+')':''}`);
+      log(`#${orderId} ${r.already?'already synced':(inv?`SENT TO QUICKB2B inv ${inv}`:'SENT TO QUICKB2B')}${dd}${r.unmapped&&r.unmapped.length?' (flagged: '+r.unmapped.join(', ')+')':''}`);
       // Pop the Maropost invoice for printing. Skipped during "Push all" (browsers
       // block many pop-ups at once) — use the per-order 🖨 Invoice button there.
       if(!opts.fromAll && !r.already) openInvoice(orderId);
       // Keep the cache in sync so a re-render shows the invoice badge.
-      if(ORDERS[orderId] && !testMode()){ ORDERS[orderId].synced = true; if(inv) ORDERS[orderId].qb2b_invoice = inv; }
+      if(ORDERS[orderId]){ ORDERS[orderId].synced = true; if(inv) ORDERS[orderId].qb2b_invoice = inv; }
       const card = $(".card[data-order='"+cssEsc(orderId)+"']");
-      if(card && !testMode()){
+      if(card){
         let badge = card.querySelector("h2 .badge.synced");
         if(!badge){ badge=document.createElement("span"); badge.className="badge synced"; card.querySelector("h2").appendChild(badge); }
         badge.textContent = inv ? `✓ QuickB2B inv ${inv}` : "✓ Sent to QuickB2B";
