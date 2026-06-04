@@ -170,14 +170,37 @@
 
 <script>
 const $ = (s, el=document) => el.querySelector(s);
-let TOKEN = sessionStorage.getItem("rt") || "";
+// --- Auth session ---------------------------------------------------------
+// Keep the password in localStorage (shared across tabs, survives navigation)
+// for 6 hours, so jumping over from PACKR doesn't ask for the password every
+// time. After 6h it's cleared and the gate asks again.
+const AUTH_TTL_MS = 6*60*60*1000;   // 6 hours
+function loadToken(){
+  try{
+    const raw = localStorage.getItem("rt");
+    if(raw){
+      const o = JSON.parse(raw);
+      if(o && o.t && o.exp && Date.now() < o.exp) return o.t;
+      localStorage.removeItem("rt");        // expired
+    }
+  }catch(e){
+    // Legacy plain-string token (pre-expiry format): adopt it once, re-saved on next login.
+    const legacy = localStorage.getItem("rt"); if(legacy) return legacy;
+  }
+  // Fall back to a token set in this tab's session (older builds used sessionStorage).
+  try{ return sessionStorage.getItem("rt") || ""; }catch(e){ return ""; }
+}
+function saveToken(t){
+  try{ localStorage.setItem("rt", JSON.stringify({ t, exp: Date.now()+AUTH_TTL_MS })); }catch(e){}
+}
+let TOKEN = loadToken();
 
 function log(msg, cls="") { const el=$("#log"); el.textContent += (cls==="err"?"✗ ":"• ")+msg+"\n"; el.scrollTop=el.scrollHeight; }
 
 function show(view){ $("#gate").style.display = view==="gate"?"block":"none"; $("#app").style.display = view==="app"?"block":"none"; }
 // Set when the user (re)opens the app, so the unmatched pop-up shows once.
 let popupOnLoad = false;
-function login(){ TOKEN=$("#pw").value; sessionStorage.setItem("rt",TOKEN); show("app"); popupOnLoad=true; bootView(); }
+function login(){ TOKEN=$("#pw").value; saveToken(TOKEN); show("app"); popupOnLoad=true; bootView(); }
 // If we were deep-linked with ?q=<order #> (e.g. from the PACKR board's "open
 // in bridge" button), jump straight to that order's search instead of the
 // normal list. Falls back to the usual load when there's no query.
@@ -270,7 +293,7 @@ async function autoShipAllFor(q){
   await markReady(id, null, { skipConfirm:true });
   printInvoiceInTab(o);
 }
-function logout(){ sessionStorage.removeItem("rt"); TOKEN=""; show("gate"); }
+function logout(){ try{localStorage.removeItem("rt");}catch(e){} try{sessionStorage.removeItem("rt");}catch(e){} TOKEN=""; show("gate"); }
 
 async function api(path, opts={}) {
   const res = await fetch(path, { ...opts, headers: { "Content-Type":"application/json", "x-review-token":TOKEN, ...(opts.headers||{}) } });
