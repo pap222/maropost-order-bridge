@@ -5,7 +5,7 @@
 //   id=<orderId>       -> look up one specific order by number (search box)
 // Each row carries its QuickB2B mapping + whether it's already synced.
 // Protected by shared password.
-import { checkAuth, json, cfg, loadItemMap, fetchWebsiteOrders, fetchOneOrder, reviewOrder, syncedSet, unavailableMap } from "../../lib/bridge.mjs";
+import { checkAuth, json, cfg, loadItemMap, fetchWebsiteOrders, fetchOneOrder, reviewOrder, syncedSet, unavailableMap, maropostIdForQb2bInvoice } from "../../lib/bridge.mjs";
 
 export default async (req) => {
   const unauth = checkAuth(req);
@@ -28,9 +28,17 @@ export default async (req) => {
 
     let orders;
     if (idLike) {
-      // Search by order number: accept "27575" or "N27575" and look it up directly.
+      // Search by order number: accept "27575" or "N27575" and look it up directly
+      // as a Maropost id first.
       const id = /^N/i.test(idLike) ? idLike.toUpperCase() : "N" + idLike.replace(/\D/g, "");
-      const one = await fetchOneOrder(id);
+      let one = await fetchOneOrder(id);
+      // Not a Maropost id? It may be a QuickB2B order number (what PACKR's board
+      // shows). Resolve it back to the Maropost id via the synced_orders log and
+      // try again, so home-order deep-links work with either code.
+      if (!one) {
+        const mid = await maropostIdForQb2bInvoice(idLike);
+        if (mid) one = await fetchOneOrder(mid);
+      }
       orders = one ? [one] : [];
     } else if (query) {
       // Whole-database text search: pull every operational order (active + ready +
