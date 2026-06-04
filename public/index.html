@@ -182,10 +182,57 @@ function login(){ TOKEN=$("#pw").value; sessionStorage.setItem("rt",TOKEN); show
 // in bridge" button), jump straight to that order's search instead of the
 // normal list. Falls back to the usual load when there's no query.
 function deepLinkQuery(){ try{ return new URLSearchParams(location.search).get("q")||""; }catch(e){ return ""; } }
-function bootView(){
+function deepLinkParam(k){ try{ return new URLSearchParams(location.search).get(k)||""; }catch(e){ return ""; } }
+async function bootView(){
   const q = deepLinkQuery();
-  if(q){ const box=$("#search"); if(box) box.value=q; serverSearch(q.trim()); return; }
+  if(q){
+    const box=$("#search"); if(box) box.value=q;
+    await serverSearch(q.trim());
+    // PACKR's home-order cards deep-link here to act on the order straight away:
+    //   &action=ship   → label + invoice + dispatch/ready (one tap)
+    //   &print=invoice → just print the invoice
+    const action = deepLinkParam("action");
+    if(/^(ship|all|done|labelinvoiceship)$/i.test(action)) autoShipFor(q.trim());
+    else if(/^(1|invoice|inv|true|yes)$/i.test(deepLinkParam("print"))) autoPrintInvoiceFor(q.trim());
+    return;
+  }
   loadOrders();
+}
+// Find the loaded order that matches a deep-link query: exact order_id first,
+// then a digits-only match, then the only result if the search returned one.
+function matchOrderId(q){
+  const qd = String(q||"").replace(/[^0-9]/g,"");
+  if(ORDERS[q]) return q;
+  const ids = Object.keys(ORDERS);
+  return ids.find(k=>String(k).replace(/[^0-9]/g,"")===qd) || (ids.length===1?ids[0]:"");
+}
+// Print an order's invoice into THIS tab — writing into the current document
+// avoids the pop-up blocker that a nested window.open() can trip on a
+// freshly-navigated tab.
+function printInvoiceInTab(o){
+  document.open(); document.write(invoiceHTML(o)); document.close();
+  setTimeout(()=>{ try{ window.print(); }catch(e){} }, 400);
+}
+function autoPrintInvoiceFor(q){
+  const id = matchOrderId(q), o = id && ORDERS[id];
+  if(!o){ $("#orders").innerHTML = "<p class='msg err'>No order found to print an invoice for “"+esc(q)+"”.</p>"; return; }
+  printInvoiceInTab(o);
+}
+// One-tap home-order finish from PACKR: print the Zebra label, mark the order
+// dispatched / ready for pickup (the single customer SMS), then print the
+// invoice into this tab. One confirm so an accidentally-opened link can't text a
+// customer. Invoice is printed LAST because it replaces the page.
+async function autoShipFor(q){
+  const id = matchOrderId(q), o = id && ORDERS[id];
+  if(!o){ $("#orders").innerHTML = "<p class='msg err'>No order found for “"+esc(q)+"”.</p>"; return; }
+  const pickup = isPickupShip(o.shipping);
+  const verb = pickup ? "ready for pickup" : "dispatched";
+  const n = copiesFor(id);
+  if(!confirm("Print "+n+" label"+(n>1?"s":"")+" + invoice and mark #"+id+" "+verb+"?\n\nThis texts the customer once.")) return;
+  const printed = await printLabels(id);
+  if(!printed && !confirm("The label didn't print (Zebra server not reachable). Still mark "+verb+" and print the invoice?")) return;
+  await markReady(id, null, { skipConfirm:true });
+  printInvoiceInTab(o);
 }
 function logout(){ sessionStorage.removeItem("rt"); TOKEN=""; show("gate"); }
 
