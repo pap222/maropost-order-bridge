@@ -16,7 +16,7 @@
 //   REVIEW_PASSWORD (for the page), QB2B_TEST_MODE ("1" = test endpoint),
 //   AUTO_MODE ("1" = let this cron run).
 
-import { isAutoMode, loadItemMap, fetchWebsiteOrders, syncedSet, buildPayload, createQb2bOrder, markSynced, purgeOldFulfilled } from "../../lib/bridge.mjs";
+import { isAutoMode, loadItemMap, fetchWebsiteOrders, syncedSet, buildPayload, createQb2bOrder, markSynced, purgeOldFulfilled, notifyPackr, qb2bInvoiceNo } from "../../lib/bridge.mjs";
 
 export default async function handler() {
   // Housekeeping (runs in both manual and auto mode): drop Completed-tab rows
@@ -55,6 +55,8 @@ export default async function handler() {
       if (result.ok) {
         await markSynced(id, "created", payload);
         summary.created++;
+        // Alert the PACKR packing screen (non-fatal).
+        await notifyPackr(order, payload, qb2bInvoiceNo(result.data));
       } else {
         summary.failed++;
         summary.errors.push({ id, msg: result.data?.message || `HTTP ${result.status}` });
