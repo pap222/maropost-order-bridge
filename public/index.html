@@ -21,7 +21,12 @@
   button.label { background:#5d4037; color:#fff; }
   button.refund { background:#ad1457; color:#fff; }
   button.ready { background:#00897b; color:#fff; }
+  button.bigdispatch { background:#2e7d32; color:#fff; font-size:15px; padding:11px 20px; box-shadow:0 1px 3px rgba(0,0,0,.25); }
   button:disabled { opacity:.5; cursor:not-allowed; }
+  /* 1–10 "how many labels" grid */
+  .copies { display:inline-flex; align-items:center; gap:3px; font-size:12px; color:#555; flex-wrap:wrap; }
+  .copies .copybtn { background:#eceff1; color:#37474f; border:1px solid var(--line); padding:5px 9px; font-size:13px; min-width:30px; }
+  .copies .copybtn.on { background:#37474f; color:#fff; border-color:#37474f; }
   .tabs { display:flex; gap:6px; margin-bottom:18px; flex-wrap:wrap; }
   .tabs button { background:#fff; color:#555; border:1px solid var(--line); }
   .tabs button.on { background:var(--green); color:#fff; border-color:var(--green); }
@@ -604,9 +609,11 @@ function getPrintSettings(){
 // a name/address can never break the label format.
 function zplEsc(s){ return String(s==null?"":s).replace(/[\^~]/g," ").replace(/\s+/g," ").trim(); }
 
-// Build the ZPL for one order's label. Pickup = name + "PICK UP" (no address);
-// delivery = name + address. Both show phone, required date and instructions.
-function zplLabel(o){
+// Build the ZPL for one order's label in PACKR's house style: big customer name
+// at the top, a rule line, then the mode (PICK UP / DELIVERY) + address, with
+// phone / required date as small meta at the bottom. `copies` adds ^PQ so the
+// printer runs off that many identical labels in one go.
+function zplLabel(o, copies){
   const c=o.customer||{}, st=o.ship_to||{};
   const pickup=isPickupShip(o.shipping);
   const name=zplEsc(st.name||c.name||"");
@@ -616,26 +623,36 @@ function zplLabel(o){
   (st.lines||[]).forEach(l=>{ if(l) lines.push(zplEsc(l)); });
   const ps = getPrintSettings();
   const LABEL_W = ps.labelW, LABEL_H = ps.labelH;
-  const W = LABEL_W - 40; // usable width inside a 20-dot margin each side
+  const W = LABEL_W - 40;                   // usable width inside a 20-dot margin
+  const fontName=72, fontMode=64, fontMeta=28;
   const z=[];
   z.push("^XA");
-  z.push("^CI28");                         // UTF-8 input
+  z.push("^CI28");                          // UTF-8 input
   z.push("^PW"+LABEL_W);
   z.push("^LL"+LABEL_H);
-  z.push("^FO20,20^A0N,58,58^FD"+(pickup?"PICK UP":"DELIVERY")+"^FS");
-  z.push("^FO"+(LABEL_W-260)+",28^A0N,36,36^FB240,1,0,R,0^FD#"+zplEsc(o.order_id)+"^FS");
-  z.push("^FO20,92^GB"+W+",4,4^FS");
-  z.push("^FO20,112^A0N,74,74^FB"+W+",2,0,L,0^FD"+name+"^FS");
-  let y=270;
+  let y=20;
+  // Customer name across the top (up to 2 wrapped lines), PACKR-style.
+  z.push("^FO20,"+y+"^A0N,"+fontName+","+fontName+"^FB"+W+",2,0,L^FD"+name+"^FS");
+  y += Math.ceil(fontName*1.2)+8;
+  // Order number, small, right-aligned on the same band.
+  z.push("^FO20,28^A0N,"+fontMeta+","+fontMeta+"^FB"+W+",1,0,R^FD#"+zplEsc(o.order_id)+"^FS");
+  // Rule line under the name.
+  z.push("^FO20,"+y+"^GB"+W+",3,3^FS"); y+=14;
+  // Mode line, big and centered like PACKR's "x of y".
+  z.push("^FO20,"+y+"^A0N,"+fontMode+","+fontMode+"^FB"+W+",1,0,C^FD"+(pickup?"PICK UP":"DELIVERY")+"^FS");
+  y += fontMode+12;
   if(pickup){
-    z.push("^FO20,"+y+"^A0N,46,46^FB"+W+",2,0,L,0^FDReady for collection in store^FS"); y+=70;
+    z.push("^FO20,"+y+"^A0N,40,40^FB"+W+",2,0,C^FDReady for collection in store^FS"); y+=64;
   } else if(lines.length){
-    z.push("^FO20,"+y+"^A0N,44,44^FB"+W+",4,4,L,0^FD"+lines.join("\\&")+"^FS");
-    y += 44*Math.min(lines.length,4) + 16;
+    z.push("^FO20,"+y+"^A0N,40,40^FB"+W+",4,4,C^FD"+lines.join("\\&")+"^FS");
+    y += 40*Math.min(lines.length,4) + 12;
   }
-  if(phone){ z.push("^FO20,"+y+"^A0N,40,40^FDPh "+phone+"^FS"); y+=52; }
-  if(o.required_date){ z.push("^FO20,"+y+"^A0N,38,38^FDRequired: "+zplEsc(o.required_date)+"^FS"); y+=50; }
-  if(o.instructions){ z.push("^FO20,"+y+"^A0N,30,30^FB"+W+",2,2,L,0^FD"+zplEsc(o.instructions)+"^FS"); }
+  // Meta footer: phone + required date, small.
+  if(phone){ z.push("^FO20,"+y+"^A0N,"+fontMeta+","+fontMeta+"^FDPh "+phone+"^FS"); y+=fontMeta+8; }
+  if(o.required_date){ z.push("^FO20,"+y+"^A0N,"+fontMeta+","+fontMeta+"^FD"+zplEsc(o.required_date)+"^FS"); y+=fontMeta+8; }
+  if(o.instructions){ z.push("^FO20,"+y+"^A0N,26,26^FB"+W+",2,2,L^FD"+zplEsc(o.instructions)+"^FS"); }
+  const n = Math.max(1, Math.min(10, copies|0 || 1));
+  if(n>1) z.push("^PQ"+n+",0,0,N");
   z.push("^XZ");
   return z.join("\n");
 }
@@ -653,26 +670,52 @@ async function sendZPL(zpl){
   }catch(e){ return false; }
 }
 
-// Print a label: send ZPL to the Zebra print server; if it isn't reachable,
-// fall back to the printable HTML page (any printer).
-async function openLabel(orderId){
+// How many labels to print per order (the 1–10 grid). Defaults to 1.
+const COPIES = {};
+function copiesFor(id){ return Math.max(1, Math.min(10, COPIES[id]||1)); }
+function setCopies(id, n, btn){
+  COPIES[id] = n;
+  if(btn){ const wrap = btn.parentElement; wrap.querySelectorAll(".copybtn").forEach(b=>b.classList.remove("on")); btn.classList.add("on"); }
+}
+
+// Print the order's label(s). Sends ZPL to the Zebra print server; if it isn't
+// reachable, falls back to the printable HTML page. Returns true if something
+// printed. This NEVER changes order status or sends a text — that's the
+// caller's job, so we can offer a "print without texting" path.
+async function printLabels(orderId){
   const o = ORDERS[orderId];
-  if(!o){ alert("Reload the page, then try Label again."); return; }
-  let printed=false;
-  const sent = await sendZPL(zplLabel(o));
+  if(!o){ alert("Reload the page, then try Label again."); return false; }
+  const n = copiesFor(orderId);
+  const sent = await sendZPL(zplLabel(o, n));
   if(sent){
-    log("#"+orderId+" label sent to Zebra ("+getPrintSettings().serverHost+")");
-    printed=true;
-  } else {
-    log("Zebra print server not reachable at "+getPrintSettings().serverHost+":9090 — opening printable label instead","err");
-    const w = window.open("", "wfs_label_"+orderId);
-    if(!w){ alert("Pop-up blocked — allow pop-ups for this site to print labels."); return; }
-    w.document.open(); w.document.write(labelHTML(o)); w.document.close(); w.focus();
-    setTimeout(()=>{ try{ w.print(); }catch(e){} }, 350);
-    printed=true;
+    log("#"+orderId+" — "+n+" label"+(n>1?"s":"")+" sent to Zebra ("+getPrintSettings().serverHost+")");
+    return true;
   }
-  // The label is the last packing step — offer to finish (status + SMS) now.
-  if(printed) await offerFinish(orderId);
+  log("Zebra print server not reachable at "+getPrintSettings().serverHost+":9090 — opening printable label instead","err");
+  const w = window.open("", "wfs_label_"+orderId);
+  if(!w){ alert("Pop-up blocked — allow pop-ups for this site to print labels."); return false; }
+  w.document.open(); w.document.write(labelHTML(o)); w.document.close(); w.focus();
+  setTimeout(()=>{ try{ w.print(); }catch(e){} }, 350);
+  return true;
+}
+
+// 🏷 Label (no text): print labels only. Never touches status / SMS, so it's
+// safe to reprint without the customer getting a second message.
+async function openLabel(orderId){ await printLabels(orderId); }
+
+// 🚚 Print & dispatch / 🏪 Print & ready: print the labels, then mark the order
+// ready (Maropost status change → the ONE customer SMS). Single confirm, single
+// text. This is the normal "I'm done packing" button.
+async function printDispatch(orderId, btn){
+  const o = ORDERS[orderId];
+  if(!o){ alert("Reload the page, then try again."); return; }
+  const pickup = isPickupShip(o.shipping);
+  const verb = pickup ? "ready for pickup (texts the customer)" : "dispatched (texts the customer)";
+  const n = copiesFor(orderId);
+  if(!confirm("Print "+n+" label"+(n>1?"s":"")+" and mark #"+orderId+" "+verb+"?")) return;
+  const printed = await printLabels(orderId);
+  if(!printed) return;                       // don't text if nothing printed
+  await markReady(orderId, btn, { skipConfirm:true });
 }
 
 function renderCard(o){
@@ -721,11 +764,15 @@ function renderCard(o){
       ${VIEW==="active" ? `
       <button class="saveall" onclick="saveAll('${esc(o.order_id)}', this)">Save all mappings</button>
       <button class="push" onclick="pushOne('${esc(o.order_id)}', this)" ${o.synced||needsMap?'disabled':''} title="${needsMap?'Map every line first (use a MISC code if needed)':''}">Confirm & Push</button>` : ''}
-      <button class="label" onclick="openLabel('${esc(o.order_id)}')" title="Print the packing label (name + pick up / delivery address)">🏷 Label</button>
+      <span class="copies" title="How many labels to print">Labels:
+        ${[1,2,3,4,5,6,7,8,9,10].map(n=>`<button class="copybtn${n===1?' on':''}" onclick="setCopies('${esc(o.order_id)}',${n},this)">${n}</button>`).join('')}
+      </span>
+      <button class="bigdispatch" onclick="printDispatch('${esc(o.order_id)}', this)" title="Print the label(s) and ${isPickupShip(o.shipping)?'mark ready for pickup':'mark dispatched'} — texts the customer once">${isPickupShip(o.shipping)?'🏪 Print & ready for pickup':'🚚 Print & dispatch'}</button>
+      <button class="label" onclick="openLabel('${esc(o.order_id)}')" title="Print the packing label only — does NOT text the customer">🏷 Label (no text)</button>
       <button class="invoice" onclick="openInvoice('${esc(o.order_id)}')">🖨 Invoice</button>
       <button class="refund" onclick="doRefund('${esc(o.order_id)}', this)" ${o.refund_total>0?'':'disabled'}>↩ Refund <span class="ramt">${money(o.refund_total||0)}</span></button>
       ${VIEW==="active" ? `
-      <button class="ready" onclick="markReady('${esc(o.order_id)}', this)">${isPickupShip(o.shipping)?'🏪 Ready for pickup':'🚚 Mark dispatched'}</button>` : ''}
+      <button class="ready" onclick="markReady('${esc(o.order_id)}', this)" title="Just change the status / text the customer — no label">${isPickupShip(o.shipping)?'🏪 Ready (no label)':'🚚 Dispatch (no label)'}</button>` : ''}
       <span class="msg"></span>
     </div>
   </div>`;
@@ -994,17 +1041,6 @@ async function markReady(orderId, btn, opts={}){
       log(`#${orderId} MARK READY FAILED: ${r.error}`,"err");
     }
   }catch(e){ if(e.message!=="unauthorized"){ if(msg){ msg.textContent=e.message; msg.className="msg err"; } if(btn) btn.disabled=false; } }
-}
-
-// After a label prints, offer to finish the order: flip the Maropost status
-// (which texts the customer) and drop it off the To-process board.
-async function offerFinish(orderId){
-  const o = ORDERS[orderId]; if(!o) return;
-  const pickup = isPickupShip(o.shipping);
-  const action = pickup ? "set it to Pending Pickup (ready for collection)" : "mark it Dispatched";
-  if(!confirm(`Label printed for #${orderId}.\n\nFinish this order now?\nThis will ${action} in Maropost, text the customer, and move it to Completed.`)) return;
-  const ready = document.querySelector(".card[data-order='"+cssEsc(orderId)+"'] .ready");
-  await markReady(orderId, ready, { skipConfirm:true });
 }
 
 function markFactor(inp){ const v=parseFloat(inp.value); inp.classList.toggle('diff', !isNaN(v) && v!==1); }
