@@ -30,6 +30,7 @@
   .tabs { display:flex; gap:6px; margin-bottom:18px; flex-wrap:wrap; }
   .tabs button { background:#fff; color:#555; border:1px solid var(--line); }
   .tabs button.on { background:var(--green); color:#fff; border-color:var(--green); }
+  .tabs .todaytoggle { margin-left:auto; align-self:center; font-size:13px; color:#37474f; background:#fff; border:1px solid var(--line); border-radius:6px; padding:6px 10px; cursor:pointer; }
   .tabs button .tcount { font-size:11px; opacity:.8; margin-left:4px; }
   input.search { padding:8px 10px; border-radius:6px; border:none; font-size:14px; width:190px; }
   /* collapsible cards */
@@ -139,6 +140,7 @@
     <button data-view="delivery" onclick="switchView('delivery')">🚚 Deliveries (ready)</button>
     <button data-view="pickup"   onclick="switchView('pickup')">🏪 Pickups (ready)</button>
     <button data-view="completed" onclick="switchView('completed')">✅ Completed</button>
+    <label class="ctl todaytoggle" title="Show only orders the customer wants today"><input type="checkbox" id="todayOnly" onchange="applyTodayFilter()" /> 📅 Today only</label>
   </div>
   <div id="orders"></div>
   <h3>Activity log</h3>
@@ -265,6 +267,7 @@ async function loadOrders(){
       $("#orders").insertAdjacentHTML("afterbegin", tomapCardHTML(data.orders));
       if(popupOnLoad){ popupOnLoad=false; showUnmatchedModal(data.orders); }
     }
+    applyTodayFilter();  // honour the "Today only" toggle on the freshly loaded cards
     log(`Loaded ${data.orders.length} ${VIEW} orders`);
   } catch(e){ if(e.message!=="unauthorized") $("#orders").innerHTML="<p class='msg err'>"+e.message+"</p>"; }
 }
@@ -305,16 +308,28 @@ function fmtWhen(iso){ if(!iso) return ""; const d=new Date(iso); return isNaN(d
 function onSearchInput(){ const q=$("#search").value; if(VIEW==="completed") filterCompleted(q); else filterCards(q); }
 function filterCards(q){
   q = String(q||"").trim().toLowerCase();
+  const todayOnly = $("#todayOnly") && $("#todayOnly").checked;
+  const today = todayWagga();
   let shown = 0;
   document.querySelectorAll("#orders .card[data-order]").forEach(card => {
     const o = ORDERS[card.dataset.order] || {};
     const hay = `${card.dataset.order} ${(o.customer&&o.customer.name)||""} ${o.shipping||""}`.toLowerCase();
-    const hit = !q || hay.includes(q);
+    const hitSearch = !q || hay.includes(q);
+    const hitToday = !todayOnly || o.required_iso===today;
+    const hit = hitSearch && hitToday;
     card.style.display = hit ? "" : "none";
     if(hit) shown++;
   });
   return shown;
 }
+// Today's date in the store's zone (Wagga) as YYYY-MM-DD, to match required_iso.
+function todayWagga(){
+  const p = new Intl.DateTimeFormat("en-CA",{timeZone:"Australia/Sydney",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
+  const g = t => (p.find(x=>x.type===t)||{}).value||"";
+  return `${g("year")}-${g("month")}-${g("day")}`;
+}
+// "📅 Today only" toggle: re-run the card filter (combines with the search box).
+function applyTodayFilter(){ filterCards($("#search") ? $("#search").value : ""); }
 // Enter / Search button. Default: search the WHOLE database (all statuses) by
 // name / email / order # on the server. With "this tab only" ticked, it just
 // filters the cards already loaded in the current tab.
