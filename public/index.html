@@ -171,7 +171,16 @@ function log(msg, cls="") { const el=$("#log"); el.textContent += (cls==="err"?"
 function show(view){ $("#gate").style.display = view==="gate"?"block":"none"; $("#app").style.display = view==="app"?"block":"none"; }
 // Set when the user (re)opens the app, so the unmatched pop-up shows once.
 let popupOnLoad = false;
-function login(){ TOKEN=$("#pw").value; sessionStorage.setItem("rt",TOKEN); show("app"); popupOnLoad=true; loadOrders(); }
+function login(){ TOKEN=$("#pw").value; sessionStorage.setItem("rt",TOKEN); show("app"); popupOnLoad=true; bootView(); }
+// If we were deep-linked with ?q=<order #> (e.g. from the PACKR board's "open
+// in bridge" button), jump straight to that order's search instead of the
+// normal list. Falls back to the usual load when there's no query.
+function deepLinkQuery(){ try{ return new URLSearchParams(location.search).get("q")||""; }catch(e){ return ""; } }
+function bootView(){
+  const q = deepLinkQuery();
+  if(q){ const box=$("#search"); if(box) box.value=q; serverSearch(q.trim()); return; }
+  loadOrders();
+}
 function logout(){ sessionStorage.removeItem("rt"); TOKEN=""; show("gate"); }
 
 async function api(path, opts={}) {
@@ -1062,7 +1071,7 @@ const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&
 const cssEsc = s => String(s).replace(/'/g,"\\'");
 
 // boot
-if(TOKEN){ show("app"); popupOnLoad=true; loadOrders(); } else { show("gate"); }
+if(TOKEN){ show("app"); popupOnLoad=true; bootView(); } else { show("gate"); }
 </script>
 </body>
 </html>
