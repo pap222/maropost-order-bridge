@@ -609,10 +609,10 @@ function getPrintSettings(){
 // a name/address can never break the label format.
 function zplEsc(s){ return String(s==null?"":s).replace(/[\^~]/g," ").replace(/\s+/g," ").trim(); }
 
-// Build the ZPL for one order's label in PACKR's house style: big customer name
-// at the top, a rule line, then the mode (PICK UP / DELIVERY) + address, with
-// phone / required date as small meta at the bottom. `copies` adds ^PQ so the
-// printer runs off that many identical labels in one go.
+// Build the ZPL for one order's label, mirroring this app's printable label:
+// a reverse-video PICK UP / DELIVERY banner, order# top-right, big customer
+// name, then the address (or "Ready for collection in store"), phone and the
+// required date. `copies` adds ^PQ so the printer runs off N identical labels.
 function zplLabel(o, copies){
   const c=o.customer||{}, st=o.ship_to||{};
   const pickup=isPickupShip(o.shipping);
@@ -624,33 +624,35 @@ function zplLabel(o, copies){
   const ps = getPrintSettings();
   const LABEL_W = ps.labelW, LABEL_H = ps.labelH;
   const W = LABEL_W - 40;                   // usable width inside a 20-dot margin
-  const fontName=72, fontMode=64, fontMeta=28;
   const z=[];
   z.push("^XA");
   z.push("^CI28");                          // UTF-8 input
   z.push("^PW"+LABEL_W);
   z.push("^LL"+LABEL_H);
   let y=20;
-  // Customer name across the top (up to 2 wrapped lines), PACKR-style.
-  z.push("^FO20,"+y+"^A0N,"+fontName+","+fontName+"^FB"+W+",2,0,L^FD"+name+"^FS");
-  y += Math.ceil(fontName*1.2)+8;
-  // Order number, small, right-aligned on the same band.
-  z.push("^FO20,28^A0N,"+fontMeta+","+fontMeta+"^FB"+W+",1,0,R^FD#"+zplEsc(o.order_id)+"^FS");
-  // Rule line under the name.
-  z.push("^FO20,"+y+"^GB"+W+",3,3^FS"); y+=14;
-  // Mode line, big and centered like PACKR's "x of y".
-  z.push("^FO20,"+y+"^A0N,"+fontMode+","+fontMode+"^FB"+W+",1,0,C^FD"+(pickup?"PICK UP":"DELIVERY")+"^FS");
-  y += fontMode+12;
+  // Order number, small, top-right (matches the .ord float-right in the HTML).
+  z.push("^FO20,26^A0N,30,30^FB"+W+",1,0,R^FD#"+zplEsc(o.order_id)+"^FS");
+  // Mode banner: a solid black pill with reversed (white) text, like the
+  // coloured .mode pill in the HTML label.
+  const bannerTxt = pickup ? "PICK UP" : "DELIVERY";
+  const bw = 60 + bannerTxt.length*34, bh = 66;
+  z.push("^FO20,"+y+"^GB"+bw+","+bh+","+bh+"^FS");                          // filled box
+  z.push("^FO20,"+(y+12)+"^A0N,42,42^FB"+bw+",1,0,C^FR^FD"+bannerTxt+"^FS"); // white text on it
+  y += bh + 22;
+  // Big customer name (up to 2 wrapped lines).
+  z.push("^FO20,"+y+"^A0N,64,64^FB"+W+",2,0,L^FD"+name+"^FS");
+  y += 64 + (name.length>22?64:0) + 16;
+  // Address block, or the pickup line.
   if(pickup){
-    z.push("^FO20,"+y+"^A0N,40,40^FB"+W+",2,0,C^FDReady for collection in store^FS"); y+=64;
+    z.push("^FO20,"+y+"^A0N,40,40^FB"+W+",2,0,L^FDReady for collection in store^FS"); y+=58;
   } else if(lines.length){
-    z.push("^FO20,"+y+"^A0N,40,40^FB"+W+",4,4,C^FD"+lines.join("\\&")+"^FS");
-    y += 40*Math.min(lines.length,4) + 12;
+    z.push("^FO20,"+y+"^A0N,36,36^FB"+W+",4,4,L^FD"+lines.join("\\&")+"^FS");
+    y += 36*Math.min(lines.length,4) + 14;
   }
-  // Meta footer: phone + required date, small.
-  if(phone){ z.push("^FO20,"+y+"^A0N,"+fontMeta+","+fontMeta+"^FDPh "+phone+"^FS"); y+=fontMeta+8; }
-  if(o.required_date){ z.push("^FO20,"+y+"^A0N,"+fontMeta+","+fontMeta+"^FD"+zplEsc(o.required_date)+"^FS"); y+=fontMeta+8; }
-  if(o.instructions){ z.push("^FO20,"+y+"^A0N,26,26^FB"+W+",2,2,L^FD"+zplEsc(o.instructions)+"^FS"); }
+  // Phone, then required date, then instructions.
+  if(phone){ z.push("^FO20,"+y+"^A0N,36,36^FDPh "+phone+"^FS"); y+=48; }
+  if(o.required_date){ z.push("^FO20,"+y+"^A0N,32,32^FDRequired: "+zplEsc(o.required_date)+"^FS"); y+=44; }
+  if(o.instructions){ z.push("^FO20,"+y+"^A0N,28,28^FB"+W+",2,2,L^FD"+zplEsc(o.instructions)+"^FS"); }
   const n = Math.max(1, Math.min(10, copies|0 || 1));
   if(n>1) z.push("^PQ"+n+",0,0,N");
   z.push("^XZ");
