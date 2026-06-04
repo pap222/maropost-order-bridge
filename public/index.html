@@ -209,7 +209,21 @@ function matchOrderId(q){
   const qd = String(q||"").replace(/[^0-9]/g,"");
   if(ORDERS[q]) return q;
   const ids = Object.keys(ORDERS);
-  return ids.find(k=>String(k).replace(/[^0-9]/g,"")===qd) || (ids.length===1?ids[0]:"");
+  // 1) digits-only match on the Maropost order id (e.g. N27586 -> 27586)
+  let hit = ids.find(k=>String(k).replace(/[^0-9]/g,"")===qd);
+  if(hit) return hit;
+  // 2) digits-only match on the QuickB2B invoice number, so PACKR can deep-link
+  //    by the order number shown on the board (e.g. 328434) even when it only
+  //    knows the QB2B number, not the Maropost id.
+  if(qd){
+    hit = ids.find(k=>{
+      const inv = ORDERS[k] && ORDERS[k].qb2b_invoice;
+      return inv && String(inv).replace(/[^0-9]/g,"")===qd;
+    });
+    if(hit) return hit;
+  }
+  // 3) if the search returned exactly one order, use it
+  return ids.length===1?ids[0]:"";
 }
 // Print an order's invoice into THIS tab — writing into the current document
 // avoids the pop-up blocker that a nested window.open() can trip on a
