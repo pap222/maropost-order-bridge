@@ -48,3 +48,13 @@ create index if not exists fulfilled_orders_at_idx on fulfilled_orders (fulfille
 -- so the dashboard can show "Sent to QuickB2B inv XXX" instead of a generic
 -- "pushed" badge. (Safe to run even if synced_orders already exists.)
 alter table synced_orders add column if not exists qb2b_invoice text;
+
+-- Dedup ledger for the Slack "needs mapping" alerts: one row per order we've
+-- already pinged about, so the 5-minute cron never re-alerts the same order.
+-- `kind` lets us reuse the table for other alert types later.
+create table if not exists notified_orders (
+  maropost_order_id text not null,
+  kind              text not null default 'needs_map',
+  created_at        timestamptz not null default now(),
+  primary key (maropost_order_id, kind)
+);
