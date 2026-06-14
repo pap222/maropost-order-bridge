@@ -16,7 +16,7 @@ export default async (req) => {
     const view = params.get("view") || "active";
     const lookupId = (params.get("id") || "").trim();
     const query = (params.get("q") || "").trim();
-    const statusFor = { delivery: [c.deliveryStatus], pickup: [c.pickupStatus] };
+    const statusFor = { delivery: [c.deliveryStatus], pickup: [c.pickupStatus], dispatched: [c.dispatchedStatus] };
     // The ready tabs don't require the paid filter (already vetted when processed)
     // and pull only the matching post-fulfilment status.
     const opts = statusFor[view]
@@ -43,7 +43,7 @@ export default async (req) => {
     } else if (query) {
       // Whole-database text search: pull every operational order (active + ready +
       // dispatched) and filter by customer name / email / company / shipping.
-      const allStatuses = [...new Set([...c.activeStatuses, c.deliveryStatus, c.pickupStatus, "Dispatched", "On Hold"])];
+      const allStatuses = [...new Set([...c.activeStatuses, c.deliveryStatus, c.pickupStatus, c.dispatchedStatus, "On Hold"])];
       const ql = query.toLowerCase();
       const pool = await fetchWebsiteOrders({ statuses: allStatuses, requirePaid: false, limit: 200 });
       orders = pool.filter((o) => {

@@ -42,6 +42,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/dispatch"
+  to = "/.netlify/functions/dispatch"
+  status = 200
+
+[[redirects]]
   from = "/api/completed"
   to = "/.netlify/functions/completed"
   status = 200

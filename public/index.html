@@ -79,6 +79,9 @@
   .tomap-card.warn { background:#fff8e1; border:1px solid #ffe082; color:#7a5b00; }
   .tomap-card.ok { background:#e8f5e9; border:1px solid #a5d6a7; color:#1b5e20; }
   .tomap-card a { color:#1565c0; cursor:pointer; }
+  .dispatch-bar { margin:0 0 14px; padding:10px 14px; border-radius:8px; font-size:14px; background:#e8f5e9; border:1px solid #a5d6a7; color:#1b5e20; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  button.dispatchall { background:#2e7d32; color:#fff; font-size:14px; padding:8px 16px; box-shadow:0 1px 3px rgba(0,0,0,.25); }
+  button.dispatchbtn { background:#2e7d32; color:#fff; }
   .pushall.sm { padding:5px 10px; font-size:13px; }
   main { padding:20px; max-width:1100px; margin:0 auto; }
   .card { background:#fff; border:1px solid var(--line); border-radius:10px; margin-bottom:18px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.06); }
@@ -142,9 +145,9 @@
 <main>
   <div class="tabs" id="tabs">
     <button data-view="active"   class="on" onclick="switchView('active')">📋 To process</button>
-    <button data-view="delivery" onclick="switchView('delivery')">🚚 Deliveries (ready)</button>
-    <button data-view="pickup"   onclick="switchView('pickup')">🏪 Pickups (ready)</button>
-    <button data-view="completed" onclick="switchView('completed')">✅ Completed</button>
+    <button data-view="delivery" onclick="switchView('delivery')">🚚 Awaiting Delivery</button>
+    <button data-view="pickup"   onclick="switchView('pickup')">🏪 Awaiting Pick Up</button>
+    <button data-view="dispatched" onclick="switchView('dispatched')">✅ Dispatched</button>
     <label class="ctl todaytoggle" title="Show only orders the customer wants today"><input type="checkbox" id="todayOnly" onchange="applyTodayFilter()" /> 📅 Today only</label>
   </div>
   <div id="orders"></div>
@@ -355,7 +358,7 @@ async function saveAuto(cb){
   }catch(e){ if(e.message!=="unauthorized"){ log("Failed to change automation: "+e.message,"err"); cb.checked=!on; } }
 }
 
-// Which board we're looking at: active | delivery | pickup | completed.
+// Which board we're looking at: active | delivery | pickup | dispatched.
 let VIEW = "active";
 function switchView(view){
   VIEW = view;
@@ -366,12 +369,12 @@ function switchView(view){
 async function loadOrders(){
   $("#orders").innerHTML = "<p>Loading…</p>";
   loadAuto();
-  if(VIEW==="completed") return loadCompleted();
   await loadQbItems();
   const empties = {
-    active:   "No paid Website orders waiting. 🎉",
-    delivery: "No deliveries marked ready. 🚚",
-    pickup:   "No pickups marked ready. 🏪",
+    active:     "No paid Website orders waiting. 🎉",
+    delivery:   "Nothing awaiting delivery. 🚚",
+    pickup:     "Nothing awaiting pick up. 🏪",
+    dispatched: "Nothing dispatched recently. ✅",
   };
   try {
     const qs = VIEW==="active" ? "" : `?view=${encodeURIComponent(VIEW)}`;
@@ -385,45 +388,71 @@ async function loadOrders(){
       $("#orders").insertAdjacentHTML("afterbegin", tomapCardHTML(data.orders));
       if(popupOnLoad){ popupOnLoad=false; showUnmatchedModal(data.orders); }
     }
+    // On the Awaiting tabs: a "Dispatch all" bar to clear the day's batch at once.
+    if(VIEW==="delivery" || VIEW==="pickup"){
+      $("#orders").insertAdjacentHTML("afterbegin", dispatchAllBarHTML(data.orders));
+    }
     applyTodayFilter();  // honour the "Today only" toggle on the freshly loaded cards
     log(`Loaded ${data.orders.length} ${VIEW} orders`);
   } catch(e){ if(e.message!=="unauthorized") $("#orders").innerHTML="<p class='msg err'>"+e.message+"</p>"; }
 }
 
-// Completed tab: a simple rolling list (auto-cleared weekly server-side).
-async function loadCompleted(){
-  $("#orders").innerHTML = "<p>Loading…</p>";
-  try {
-    const data = await api("/api/completed");
-    if (data.setup){ $("#orders").innerHTML = "<p class='msg err'>Completed log isn’t set up yet: run <b>unavailable_refunds.sql</b> in Supabase (it creates the <code>fulfilled_orders</code> table). "+esc(data.error||"")+"</p>"; return; }
-    if (data.error){ $("#orders").innerHTML = "<p class='msg err'>"+data.error+"</p>"; return; }
-    if (!data.orders.length){ $("#orders").innerHTML = "<p>Nothing completed in the last 7 days. (Orders show here once you hit “Mark dispatched / Ready for pickup”.)</p>"; return; }
-    const rows = data.orders.map(o => {
-      const rowText = `${o.order_id} ${o.customer||""} ${o.shipping||""} ${o.status||""}`.toLowerCase();
-      return `
-      <tr data-row="${esc(rowText)}">
-        <td><b>#${esc(o.order_id)}</b></td>
-        <td>${o.mode==="pickup"?"🏪 Pickup":"🚚 Delivery"}</td>
-        <td>${esc(o.status||"")}</td>
-        <td>${esc(o.customer||"")}</td>
-        <td>${esc(o.shipping||"")}</td>
-        <td>${money(o.total||0)}</td>
-        <td>${esc(fmtWhen(o.fulfilled_at))}</td>
-      </tr>`;
-    }).join("");
-    $("#orders").innerHTML = `<div class="card"><table>
-      <thead><tr><th>Order</th><th>Type</th><th>Status</th><th>Customer</th><th>Shipping</th><th>Total</th><th>Marked ready</th></tr></thead>
-      <tbody>${rows}</tbody></table>
-      <div class="cust">These rows clear automatically after 7 days — the real record stays in Maropost.</div>
-    </div>`;
-    log(`Loaded ${data.orders.length} completed orders`);
-  } catch(e){ if(e.message!=="unauthorized") $("#orders").innerHTML="<p class='msg err'>"+e.message+"</p>"; }
+// "Dispatch all" bar shown on the Awaiting tabs: moves every order on the board
+// to Dispatched in one click (the daily-run action).
+function dispatchAllBarHTML(orders){
+  const n = orders.length;
+  const what = VIEW==="pickup" ? "awaiting pick up" : "awaiting delivery";
+  return `<div class="dispatch-bar">📦 <b>${n}</b> order${n===1?"":"s"} ${what}.
+    <button class="dispatchall" onclick="dispatchAll()">✅ Mark all ${n} dispatched</button>
+    <span class="msg"></span></div>`;
 }
-function fmtWhen(iso){ if(!iso) return ""; const d=new Date(iso); return isNaN(d)?"":d.toLocaleString("en-AU",{timeZone:"Australia/Sydney",day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}); }
+
+// Fade a card off the board and show the empty message if it was the last one.
+function removeCardFor(orderId){
+  const card = document.querySelector(".card[data-order='"+cssEsc(orderId)+"']");
+  if(!card) return;
+  card.style.transition="opacity .3s"; card.style.opacity="0";
+  setTimeout(()=>{ card.remove(); if(!$("#orders").querySelector(".card")) loadOrders(); }, 300);
+}
+
+// Dispatch one order: Maropost status -> Dispatched. No label, no QuickB2B.
+async function dispatchOne(orderId, btn){
+  if(!confirm(`Mark order #${orderId} as Dispatched?\n\nThis sets its Maropost status to Dispatched and moves it to the Dispatched tab.`)) return;
+  const msg = btn ? $(".msg", btn.parentElement) : null;
+  if(msg){ msg.textContent="updating…"; msg.className="msg"; }
+  if(btn) btn.disabled=true;
+  try{
+    const r = await api("/api/dispatch",{ method:"POST", body: JSON.stringify({ orderId }) });
+    if(r.ok){ log(`#${orderId} → Dispatched`); removeCardFor(orderId); }
+    else {
+      const err = r.error || (r.results && r.results[0] && r.results[0].error) || "failed";
+      if(msg){ msg.textContent = err; msg.className="msg err"; }
+      if(btn) btn.disabled=false;
+      log(`#${orderId} DISPATCH FAILED: ${err}`,"err");
+    }
+  }catch(e){ if(e.message!=="unauthorized"){ if(msg){ msg.textContent=e.message; msg.className="msg err"; } if(btn) btn.disabled=false; } }
+}
+
+// Dispatch every order currently on the Awaiting board in one batch.
+async function dispatchAll(){
+  const ids = Array.from(document.querySelectorAll("#orders .card[data-order]"))
+    .map(c => c.getAttribute("data-order"));
+  if(!ids.length) return;
+  const what = VIEW==="pickup" ? "pick-up" : "delivery";
+  if(!confirm(`Mark all ${ids.length} ${what} order${ids.length===1?"":"s"} as Dispatched?\n\nThis updates every order's Maropost status to Dispatched.`)) return;
+  const bar = $(".dispatch-bar");
+  const msg = bar ? $(".msg", bar) : null;
+  if(msg){ msg.textContent = `dispatching ${ids.length}…`; msg.className="msg"; }
+  try{
+    const r = await api("/api/dispatch",{ method:"POST", body: JSON.stringify({ orderIds: ids }) });
+    log(`Dispatch all → ${r.count||0} dispatched${r.failed?`, ${r.failed} failed`:""}`);
+    loadOrders();   // reload to reflect what actually moved
+  }catch(e){ if(e.message!=="unauthorized"){ if(msg){ msg.textContent=e.message; msg.className="msg err"; } } }
+}
 
 // --- search ---------------------------------------------------------------
 // Live filter of the cards already on the page, by order # or customer name.
-function onSearchInput(){ const q=$("#search").value; if(VIEW==="completed") filterCompleted(q); else filterCards(q); }
+function onSearchInput(){ filterCards($("#search").value); }
 function filterCards(q){
   q = String(q||"").trim().toLowerCase();
   const todayOnly = $("#todayOnly") && $("#todayOnly").checked;
@@ -453,10 +482,9 @@ function applyTodayFilter(){ filterCards($("#search") ? $("#search").value : "")
 // filters the cards already loaded in the current tab.
 async function searchOrders(){
   const q = $("#search").value.trim();
-  if(!q){ filterCards(""); if(VIEW==="completed") filterCompleted(""); return; }
-  // "This tab only" -> local filter of what's on screen (incl. Completed table).
+  if(!q){ filterCards(""); return; }
+  // "This tab only" -> local filter of the cards already on screen.
   if($("#tabOnly") && $("#tabOnly").checked){
-    if(VIEW==="completed"){ filterCompleted(q); return; }
     const shown = filterCards(q);
     if(shown===0 && /^N?\d+$/i.test(q)) return serverSearch(q); // fall back to a direct lookup
     return;
@@ -843,14 +871,15 @@ async function printLabels(orderId){
 // safe to reprint without the customer getting a second message.
 async function openLabel(orderId){ await printLabels(orderId); }
 
-// 🚚 Print & dispatch / 🏪 Print & ready: print the labels, then mark the order
-// ready (Maropost status change → the ONE customer SMS). Single confirm, single
-// text. This is the normal "I'm done packing" button.
+// 🚚 Print & ready for delivery / 🏪 Print & ready for pickup: print the labels,
+// then move the order to its Awaiting tab (Maropost status change). Pickup texts
+// the customer; delivery just moves to Awaiting Delivery. The "I'm done packing"
+// button. Actual dispatch happens later from the Awaiting Delivery tab.
 async function printDispatch(orderId, btn){
   const o = ORDERS[orderId];
   if(!o){ alert("Reload the page, then try again."); return; }
   const pickup = isPickupShip(o.shipping);
-  const verb = pickup ? "ready for pickup (texts the customer)" : "dispatched (texts the customer)";
+  const verb = pickup ? "ready for pickup (texts the customer)" : "awaiting delivery";
   const n = copiesFor(orderId);
   if(!confirm("Print "+n+" label"+(n>1?"s":"")+" and mark #"+orderId+" "+verb+"?")) return;
   const printed = await printLabels(orderId);
@@ -907,15 +936,18 @@ function renderCard(o){
       ${VIEW==="active" ? `
       <button class="saveall" onclick="saveAll('${esc(o.order_id)}', this)">Save all mappings</button>
       <button class="push" onclick="pushOne('${esc(o.order_id)}', this)" ${o.synced||needsMap?'disabled':''} title="${needsMap?'Map every line first (use a MISC code if needed)':''}">Confirm & Push</button>` : ''}
-      <span class="copies" title="How many labels to print">Labels:
+      ${VIEW!=="dispatched" ? `<span class="copies" title="How many labels to print">Labels:
         ${[1,2,3,4,5,6,7,8,9,10].map(n=>`<button class="copybtn${n===1?' on':''}" onclick="setCopies('${esc(o.order_id)}',${n},this)">${n}</button>`).join('')}
-      </span>
-      <button class="bigdispatch" onclick="printDispatch('${esc(o.order_id)}', this)" title="Print the label(s) and ${isPickupShip(o.shipping)?'mark ready for pickup':'mark dispatched'} — texts the customer once">${isPickupShip(o.shipping)?'🏪 Print & ready for pickup':'🚚 Print & dispatch'}</button>
+      </span>` : ''}
+      ${VIEW==="active" ? `
+      <button class="bigdispatch" onclick="printDispatch('${esc(o.order_id)}', this)" title="Print the label(s) and ${pickup?'mark ready for pickup — texts the customer':'move it to Awaiting Delivery'}">${pickup?'🏪 Print & ready for pickup':'🚚 Print & ready for delivery'}</button>` : ''}
       <button class="label" onclick="openLabel('${esc(o.order_id)}')" title="Print the packing label only — does NOT text the customer">🏷 Label (no text)</button>
       <button class="invoice" onclick="openInvoice('${esc(o.order_id)}')">🖨 Invoice</button>
       <button class="refund" onclick="doRefund('${esc(o.order_id)}', this)" ${o.refund_total>0?'':'disabled'}>↩ Refund <span class="ramt">${money(o.refund_total||0)}</span></button>
       ${VIEW==="active" ? `
-      <button class="ready" onclick="markReady('${esc(o.order_id)}', this)" title="Just change the status / text the customer — no label">${isPickupShip(o.shipping)?'🏪 Ready (no label)':'🚚 Dispatch (no label)'}</button>` : ''}
+      <button class="ready" onclick="markReady('${esc(o.order_id)}', this)" title="${pickup?'Mark ready to collect — texts the customer (no label)':'Move to Awaiting Delivery — no text, no label'}">${pickup?'🏪 Ready for pickup (no label)':'🚚 Ready for delivery (no label)'}</button>` : ''}
+      ${(VIEW==="delivery"||VIEW==="pickup") ? `
+      <button class="bigdispatch dispatchbtn" onclick="dispatchOne('${esc(o.order_id)}', this)" title="Move this order to Dispatched in Maropost">✅ Mark dispatched</button>` : ''}
       <span class="msg"></span>
     </div>
   </div>`;
@@ -1158,24 +1190,28 @@ function refundDocketHTML(d){
 // Pickup vs delivery from the shipping label (mirrors the server's isPickup).
 function isPickupShip(ship){ return /pick\s*-?\s*up/i.test(String(ship||"")); }
 
-// "Mark ready": change the Maropost status (Dispatched / Pending Pickup), which
-// fires the customer SMS, then drop the card off the active board.
+// "Mark ready": change the Maropost status, moving the order to its Awaiting tab.
+//   pickup   -> Pending Pickup   (texts the customer "ready to collect")
+//   delivery -> Pending Dispatch (Awaiting Delivery; no SMS — dispatched later)
 async function markReady(orderId, btn, opts={}){
   const o = ORDERS[orderId];
   const pickup = isPickupShip(o && o.shipping);
-  const verb = pickup ? "ready for pickup (Pending Pickup)" : "dispatched (Dispatched)";
+  const verb = pickup ? "ready for pickup" : "awaiting delivery";
+  const note = pickup
+    ? "This sets the Maropost status to Pending Pickup and texts the customer, then removes it from this list."
+    : "This sets the Maropost status to Pending Dispatch (Awaiting Delivery) — no customer SMS — then removes it from this list.";
   if(opts.skipConfirm){
     // Caller already prompted (e.g. the label flow) — but still guard an unpushed order.
     if(o && o.synced===false && !confirm(`Order #${orderId} hasn't been pushed to QuickB2B yet.\nFinish it anyway?`)) return;
   } else if(o && o.synced===false && !confirm(`Order #${orderId} hasn't been pushed to QuickB2B yet.\nMark it ${verb} anyway?`)) return;
-  else if(!(o && o.synced===false) && !confirm(`Mark order #${orderId} as ${verb}?\n\nThis changes the Maropost status and sends the customer an SMS, then removes it from this list.`)) return;
+  else if(!(o && o.synced===false) && !confirm(`Mark order #${orderId} as ${verb}?\n\n${note}`)) return;
   const msg = btn ? $(".msg", btn.parentElement) : null;
   if(msg){ msg.textContent="updating…"; msg.className="msg"; }
   if(btn) btn.disabled=true;
   try{
     const r = await api("/api/mark-ready",{ method:"POST", body: JSON.stringify({ orderId }) });
     if(r.ok){
-      log(`#${orderId} marked ${r.mode==="pickup"?"Pending Pickup":"Dispatched"} → SMS sent`);
+      log(`#${orderId} → ${r.mode==="pickup"?"Pending Pickup (texted)":"Awaiting Delivery"}`);
       const card = document.querySelector(".card[data-order='"+cssEsc(orderId)+"']");
       if(card){ card.style.transition="opacity .3s"; card.style.opacity="0"; setTimeout(()=>{ card.remove(); if(!$("#orders").querySelector(".card")) $("#orders").innerHTML="<p>No paid Website orders waiting. 🎉</p>"; }, 300); }
     } else {
