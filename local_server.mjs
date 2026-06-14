@@ -12,6 +12,7 @@ import unavailableFn from "./netlify/functions/set-unavailable.mjs";
 import refundFn from "./netlify/functions/refund.mjs";
 import markReadyFn from "./netlify/functions/mark-ready.mjs";
 import dispatchFn from "./netlify/functions/dispatch.mjs";
+import countsFn from "./netlify/functions/counts.mjs";
 import completedFn from "./netlify/functions/completed.mjs";
 
 const ROUTES = {
@@ -23,6 +24,7 @@ const ROUTES = {
   "/api/refund": refundFn,
   "/api/mark-ready": markReadyFn,
   "/api/dispatch": dispatchFn,
+  "/api/counts": countsFn,
   "/api/completed": completedFn,
 };
 const PORT = 8910;

@@ -31,7 +31,8 @@
   .tabs button { background:#fff; color:#555; border:1px solid var(--line); }
   .tabs button.on { background:var(--green); color:#fff; border-color:var(--green); }
   .tabs .todaytoggle { margin-left:auto; align-self:center; font-size:13px; color:#37474f; background:#fff; border:1px solid var(--line); border-radius:6px; padding:6px 10px; cursor:pointer; }
-  .tabs button .tcount { font-size:11px; opacity:.8; margin-left:4px; }
+  .tabs button .tcount { display:none; min-width:20px; padding:1px 7px; margin-left:7px; border-radius:999px; background:#c62828; color:#fff; font-size:12px; font-weight:700; line-height:1.5; text-align:center; }
+  .tabs button.on .tcount { background:#fff; color:var(--green); }
   input.search { padding:8px 10px; border-radius:6px; border:none; font-size:14px; width:190px; }
   /* collapsible cards */
   .card.collapsed .cbody { display:none; }
@@ -82,6 +83,15 @@
   .dispatch-bar { margin:0 0 14px; padding:10px 14px; border-radius:8px; font-size:14px; background:#e8f5e9; border:1px solid #a5d6a7; color:#1b5e20; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
   button.dispatchall { background:#2e7d32; color:#fff; font-size:14px; padding:8px 16px; box-shadow:0 1px 3px rgba(0,0,0,.25); }
   button.dispatchbtn { background:#2e7d32; color:#fff; }
+  .ship-group { margin:0 0 18px; }
+  .ship-head { display:flex; align-items:center; gap:10px; margin:0 0 8px; flex-wrap:wrap; position:sticky; top:0; z-index:2; }
+  .ship-bubble { display:inline-block; padding:5px 13px; border-radius:999px; font-size:14px; font-weight:700; box-shadow:0 1px 2px rgba(0,0,0,.12); }
+  .ship-bubble.today { background:#2e7d32; color:#fff; }
+  .ship-bubble.overdue { background:#c62828; color:#fff; }
+  .ship-bubble.soon { background:#1565c0; color:#fff; }
+  .ship-bubble.future { background:#eceff1; color:#37474f; border:1px solid var(--line); }
+  .ship-bubble.nodate { background:#fff3e0; color:#8a5a00; border:1px solid #ffcc80; }
+  button.dispatchgrp { background:#2e7d32; color:#fff; font-size:13px; padding:5px 12px; }
   .pushall.sm { padding:5px 10px; font-size:13px; }
   main { padding:20px; max-width:1100px; margin:0 auto; }
   .card { background:#fff; border:1px solid var(--line); border-radius:10px; margin-bottom:18px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.06); }
@@ -144,9 +154,9 @@
 <datalist id="qbList"></datalist>
 <main>
   <div class="tabs" id="tabs">
-    <button data-view="active"   class="on" onclick="switchView('active')">📋 To process</button>
-    <button data-view="delivery" onclick="switchView('delivery')">🚚 Awaiting Delivery</button>
-    <button data-view="pickup"   onclick="switchView('pickup')">🏪 Awaiting Pick Up</button>
+    <button data-view="active"   class="on" onclick="switchView('active')">📋 To process<span class="tcount" id="tc-active"></span></button>
+    <button data-view="delivery" onclick="switchView('delivery')">🚚 Awaiting Delivery<span class="tcount" id="tc-delivery"></span></button>
+    <button data-view="pickup"   onclick="switchView('pickup')">🏪 Awaiting Pick Up<span class="tcount" id="tc-pickup"></span></button>
     <button data-view="dispatched" onclick="switchView('dispatched')">✅ Dispatched</button>
     <label class="ctl todaytoggle" title="Show only orders the customer wants today"><input type="checkbox" id="todayOnly" onchange="applyTodayFilter()" /> 📅 Today only</label>
   </div>
@@ -382,19 +392,91 @@ async function loadOrders(){
     if (data.error){ $("#orders").innerHTML = "<p class='msg err'>"+data.error+"</p>"; return; }
     if (!data.orders.length){ $("#orders").innerHTML = "<p>"+(empties[VIEW]||"Nothing here.")+"</p>"; return; }
     data.orders.forEach(o => { ORDERS[o.order_id] = o; });
-    $("#orders").innerHTML = data.orders.map(renderCard).join("");
+    // Awaiting tabs: group the cards into date "bubbles" (what to ship + when),
+    // soonest/overdue first, each with a per-day Dispatch button. Other tabs: a
+    // plain newest-first list.
+    if(VIEW==="delivery" || VIEW==="pickup"){
+      $("#orders").innerHTML = renderShipGroups(data.orders);
+      $("#orders").insertAdjacentHTML("afterbegin", dispatchAllBarHTML(data.orders));
+    } else {
+      $("#orders").innerHTML = data.orders.map(renderCard).join("");
+    }
     // On the To-process board: persistent "to map" banner + a once-per-login pop-up.
     if(VIEW==="active"){
       $("#orders").insertAdjacentHTML("afterbegin", tomapCardHTML(data.orders));
       if(popupOnLoad){ popupOnLoad=false; showUnmatchedModal(data.orders); }
     }
-    // On the Awaiting tabs: a "Dispatch all" bar to clear the day's batch at once.
-    if(VIEW==="delivery" || VIEW==="pickup"){
-      $("#orders").insertAdjacentHTML("afterbegin", dispatchAllBarHTML(data.orders));
-    }
     applyTodayFilter();  // honour the "Today only" toggle on the freshly loaded cards
     log(`Loaded ${data.orders.length} ${VIEW} orders`);
   } catch(e){ if(e.message!=="unauthorized") $("#orders").innerHTML="<p class='msg err'>"+e.message+"</p>"; }
+  loadCounts();   // refresh the tab badges (fire-and-forget, doesn't block the list)
+}
+
+// Tab badges: show how many orders are waiting on each tab without clicking in.
+async function loadCounts(){
+  try{
+    const d = await api("/api/counts");
+    if(d && !d.error){ setTc("active", d.active); setTc("delivery", d.delivery); setTc("pickup", d.pickup); }
+  }catch(e){ /* non-fatal — leave badges as-is */ }
+}
+function setTc(view, n){
+  const el = document.getElementById("tc-"+view);
+  if(!el) return;
+  if(n>0){ el.textContent = n; el.style.display=""; } else { el.textContent=""; el.style.display="none"; }
+}
+
+// Shift a YYYY-MM-DD date string by n days (UTC math, no timezone drift).
+function addDaysISO(iso, n){ const d=new Date(iso+"T00:00:00Z"); d.setUTCDate(d.getUTCDate()+n); return d.toISOString().slice(0,10); }
+
+// A date "bubble" label + colour class for a ship-date group, relative to today.
+function shipBubble(iso, rdate, count){
+  const today = todayWagga();
+  let cls = "future", label;
+  if(!iso){ cls="nodate"; label="🗓 No ship date set"; }
+  else if(iso < today){ cls="overdue"; label=`⚠ OVERDUE · ${rdate||iso}`; }
+  else if(iso === today){ cls="today"; label="📅 TODAY"; }
+  else if(iso === addDaysISO(today,1)){ cls="soon"; label=`📦 Tomorrow · ${rdate||iso}`; }
+  else label=`📅 ${rdate||iso}`;
+  return `<span class="ship-bubble ${cls}">${label} · ${count}</span>`;
+}
+
+// Group the Awaiting cards by required ship date so staff can see WHAT to ship and
+// WHEN. Soonest/overdue first; "no date" last. Each group gets a count bubble and
+// its own Dispatch button (ship just that day's batch).
+function renderShipGroups(orders){
+  const groups = new Map();   // iso -> { rdate, orders[] }
+  orders.forEach(o => {
+    const iso = o.required_iso || "";
+    if(!groups.has(iso)) groups.set(iso, { rdate: o.required_date || "", orders: [] });
+    groups.get(iso).orders.push(o);
+  });
+  // Sort keys ascending by date; empty ("no date") sorts last.
+  const keys = [...groups.keys()].sort((a,b)=> (a||"9999-12-31").localeCompare(b||"9999-12-31"));
+  return keys.map(iso => {
+    const g = groups.get(iso);
+    const n = g.orders.length;
+    return `<div class="ship-group" data-iso="${esc(iso)}">
+      <div class="ship-head">
+        ${shipBubble(iso, g.rdate, n)}
+        <button class="dispatchgrp" onclick="dispatchGroup('${esc(iso)}', this)" title="Mark this date's orders Dispatched">✅ Dispatch ${n}</button>
+      </div>
+      ${g.orders.map(renderCard).join("")}
+    </div>`;
+  }).join("");
+}
+
+// Dispatch just the orders in one date group.
+async function dispatchGroup(iso, btn){
+  const grp = btn.closest(".ship-group");
+  const ids = Array.from(grp.querySelectorAll(".card[data-order]")).map(c=>c.getAttribute("data-order"));
+  if(!ids.length) return;
+  if(!confirm(`Mark these ${ids.length} order${ids.length===1?"":"s"} as Dispatched?`)) return;
+  btn.disabled=true; const was=btn.textContent; btn.textContent="dispatching…";
+  try{
+    const r = await api("/api/dispatch",{ method:"POST", body: JSON.stringify({ orderIds: ids }) });
+    log(`Dispatch ${iso||"(no date)"} → ${r.count||0} dispatched${r.failed?`, ${r.failed} failed`:""}`);
+    loadOrders();
+  }catch(e){ if(e.message!=="unauthorized"){ btn.disabled=false; btn.textContent=was; } }
 }
 
 // "Dispatch all" bar shown on the Awaiting tabs: moves every order on the board
