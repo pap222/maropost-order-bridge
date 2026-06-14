@@ -18,10 +18,22 @@ export default async (req) => {
     const query = (params.get("q") || "").trim();
     const statusFor = { delivery: [c.deliveryStatus], pickup: [c.pickupStatus], dispatched: [c.dispatchedStatus] };
     // The ready tabs don't require the paid filter (already vetted when processed)
-    // and pull only the matching post-fulfilment status.
-    const opts = statusFor[view]
-      ? { statuses: statusFor[view], requirePaid: false }
-      : {};
+    // and pull only the matching post-fulfilment status. These statuses have years
+    // of history, and Neto returns OLDEST-first, so we window to recently-updated
+    // orders (the dispatch/mark-ready action bumps DateUpdated) and pull the newest
+    // first. Dispatched is sorted by when it was dispatched (DateUpdated).
+    const windowDays = { dispatched: 30, delivery: 60, pickup: 60 };
+    let opts = {};
+    if (statusFor[view]) {
+      const since = new Date(Date.now() - windowDays[view] * 86400000).toISOString().slice(0, 10);
+      opts = {
+        statuses: statusFor[view],
+        requirePaid: false,
+        limit: 200,
+        extraFilter: { DateUpdatedFrom: since },
+        sortBy: view === "dispatched" ? "DateUpdated" : "DatePlaced",
+      };
+    }
     const itemMap = await loadItemMap();
     // A bare number (with/without "N") is always an order-id lookup.
     const idLike = (lookupId || (query && /^N?\d+$/i.test(query) ? query : "")).trim();
