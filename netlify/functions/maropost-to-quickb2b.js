@@ -82,10 +82,13 @@ export default async function handler() {
       for (const b of ready) {
         const result = await createQb2bOrder(b.payload, false);
         if (result.ok) {
-          await markSynced(b.id, "created", b.payload);
+          // Capture the QuickB2B invoice number so the dashboard can later search
+          // this order by its QB2B number (a manual push already does this).
+          const invoice = qb2bInvoiceNo(result.data);
+          await markSynced(b.id, "created", b.payload, invoice);
           summary.created++;
           // Alert the PACKR packing screen (non-fatal).
-          await notifyPackr(b.o, b.payload, qb2bInvoiceNo(result.data));
+          await notifyPackr(b.o, b.payload, invoice);
         } else {
           summary.failed++;
           summary.errors.push({ id: b.id, msg: result.data?.message || `HTTP ${result.status}` });
