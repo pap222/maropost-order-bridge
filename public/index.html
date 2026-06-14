@@ -379,6 +379,7 @@ function switchView(view){
 async function loadOrders(){
   $("#orders").innerHTML = "<p>Loading…</p>";
   loadAuto();
+  loadCounts();   // refresh tab badges first, so they update even on empty/error tabs
   await loadQbItems();
   const empties = {
     active:     "No paid Website orders waiting. 🎉",
@@ -409,7 +410,6 @@ async function loadOrders(){
     applyTodayFilter();  // honour the "Today only" toggle on the freshly loaded cards
     log(`Loaded ${data.orders.length} ${VIEW} orders`);
   } catch(e){ if(e.message!=="unauthorized") $("#orders").innerHTML="<p class='msg err'>"+e.message+"</p>"; }
-  loadCounts();   // refresh the tab badges (fire-and-forget, doesn't block the list)
 }
 
 // Tab badges: show how many orders are waiting on each tab without clicking in.
@@ -422,7 +422,9 @@ async function loadCounts(){
 function setTc(view, n){
   const el = document.getElementById("tc-"+view);
   if(!el) return;
-  if(n>0){ el.textContent = n; el.style.display=""; } else { el.textContent=""; el.style.display="none"; }
+  // NB: must set an explicit display — the CSS default is display:none, so ""
+  // would just fall back to hidden and the badge would never show.
+  if(n>0){ el.textContent = n; el.style.display="inline-block"; } else { el.textContent=""; el.style.display="none"; }
 }
 
 // Shift a YYYY-MM-DD date string by n days (UTC math, no timezone drift).
