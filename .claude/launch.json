@@ -6,6 +6,12 @@
       "runtimeExecutable": "node",
       "runtimeArgs": ["--env-file=.env", "local_server.mjs"],
       "port": 8910
+    },
+    {
+      "name": "ai-landing",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "../ai-demo-landing", "-l", "8920"],
+      "port": 8920
     }
   ]
 }
