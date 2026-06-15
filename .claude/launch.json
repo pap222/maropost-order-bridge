@@ -12,6 +12,12 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["serve", "../ai-demo-landing", "-l", "8920"],
       "port": 8920
+    },
+    {
+      "name": "packr-preview",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "../packr/public", "-l", "8930"],
+      "port": 8930
     }
   ]
 }
