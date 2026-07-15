@@ -18,6 +18,18 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["serve", "../packr/public", "-l", "8930"],
       "port": 8930
+    },
+    {
+      "name": "focus-board",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "../focus-board", "-l", "8940"],
+      "port": 8940
+    },
+    {
+      "name": "calc",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "../photo-calculator/public", "-l", "8950"],
+      "port": 8950
     }
   ]
 }
