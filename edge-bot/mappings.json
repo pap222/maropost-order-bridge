@@ -1,0 +1,9 @@
+[
+  {
+    "_comment": "Manual, trusted pairings. outcome = name of the Polymarket outcome that corresponds to the Betfair runner. Remove this example.",
+    "polymarketSlug": "example-slug-from-polymarket-url",
+    "polymarketOutcome": "Yes",
+    "betfairMarketId": "1.234567890",
+    "betfairSelectionId": 12345678
+  }
+]

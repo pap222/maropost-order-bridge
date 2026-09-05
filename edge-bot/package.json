@@ -1,0 +1,19 @@
+{
+  "name": "edge-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Scans Betfair Exchange and Polymarket for the same events, flags mispricings, and bets (dry-run by default) when there is an edge.",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "scan": "node src/index.mjs scan",
+    "watch": "node src/index.mjs watch",
+    "bf:markets": "node src/index.mjs bf-markets",
+    "pm:markets": "node src/index.mjs pm-markets",
+    "test": "node --test test/*.test.mjs"
+  },
+  "optionalDependencies": {
+    "@polymarket/clob-client": "^4.13.0",
+    "ethers": "^5.7.2"
+  }
+}
