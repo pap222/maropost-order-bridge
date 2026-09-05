@@ -2,3 +2,9 @@
 .env.*
 node_modules/
 .netlify/
+
+__pycache__/
+*.pyc
+.pytest_cache/
+tennis_scalper/data/
+tennis_scalper/out/

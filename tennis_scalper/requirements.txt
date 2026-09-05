@@ -1,0 +1,3 @@
+pytest>=7
+# optional, only for reading tennis-data.co.uk xlsx files and for the live recorder:
+# pandas>=2 ; openpyxl ; requests>=2
