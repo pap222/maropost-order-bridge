@@ -1,0 +1,1078 @@
+<title>Wagga Fruit Supply Floor Planner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --bg:#F3F1EA; --panel:#FBFAF6; --panel-2:#F0EDE4; --ink:#1E211D; --muted:#6B6E66;
+    --line:#DAD6CB; --line-2:#C9C4B7; --accent:#C8202F; --accent-ink:#FFFFFF; --accent-soft:#F7DFE1;
+    --stage:#D5D2C8; --card:#FFFFFF; --ok:#2F7A3A; --lime:#B5D63A; --orange:#F08A24; --yellow:#F2C21B;
+    --shadow:0 1px 2px rgba(30,33,29,.08),0 6px 18px rgba(30,33,29,.08);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#181A18; --panel:#20231F; --panel-2:#292C27; --ink:#EDEBE3; --muted:#9A9D94;
+      --line:#34382F; --line-2:#454A3F; --accent:#E23A48; --accent-ink:#FFFFFF; --accent-soft:#4A2226;
+      --stage:#0F110F; --card:#F6F4EC; --ok:#6BBF72;
+      --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 18px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#181A18; --panel:#20231F; --panel-2:#292C27; --ink:#EDEBE3; --muted:#9A9D94;
+    --line:#34382F; --line-2:#454A3F; --accent:#E23A48; --accent-ink:#FFFFFF; --accent-soft:#4A2226;
+    --stage:#0F110F; --card:#F6F4EC; --ok:#6BBF72;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 18px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.4 "Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;overflow:hidden}
+  button,input,select{font:inherit;color:inherit}
+  button{cursor:pointer;background:var(--panel-2);border:1px solid var(--line-2);border-radius:4px;padding:5px 10px;line-height:1.2}
+  button:hover{border-color:var(--ink)}
+  button:focus-visible,input:focus-visible,select:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+  button.primary:hover{filter:brightness(1.08)}
+  button.ghost{background:transparent;border-color:transparent}
+  button.ghost:hover{background:var(--panel-2);border-color:var(--line-2)}
+  button.danger{color:var(--accent);border-color:var(--accent)}
+  button[disabled]{opacity:.45;cursor:default}
+  input,select{background:var(--panel);border:1px solid var(--line-2);border-radius:4px;padding:5px 8px;min-width:0}
+  input[type=number]{font-variant-numeric:tabular-nums;width:6.5em}
+  .app{display:grid;grid-template-rows:auto 1fr auto;grid-template-columns:270px 1fr 290px;height:100vh;
+       grid-template-areas:"top top top" "left stage right" "foot foot foot"}
+  header.top{grid-area:top;display:flex;align-items:center;gap:14px;padding:8px 14px;background:var(--panel);border-bottom:1px solid var(--line)}
+  .brand{display:flex;align-items:baseline;gap:8px;white-space:nowrap}
+  .brand .name{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:22px;letter-spacing:.01em;color:var(--accent)}
+  .brand .sub{font-family:"Barlow Condensed",sans-serif;font-weight:600;font-size:15px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+  .seg{display:inline-flex;border:1px solid var(--line-2);border-radius:4px;overflow:hidden}
+  .seg button{border:0;border-radius:0;background:transparent;padding:5px 12px}
+  .seg button+button{border-left:1px solid var(--line-2)}
+  .seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+  .spacer{flex:1}
+  .saveBar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+  .saveBar input[type=text]{width:180px}
+  .saveBar select{max-width:200px}
+  aside{background:var(--panel);overflow:auto;display:flex;flex-direction:column;min-height:0}
+  aside.left{grid-area:left;border-right:1px solid var(--line)}
+  aside.right{grid-area:right;border-left:1px solid var(--line)}
+  .tabs{display:flex;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel);z-index:2}
+  .tabs button{flex:1;border:0;border-radius:0;background:transparent;padding:9px 6px;font-family:"Barlow Condensed",sans-serif;font-weight:600;font-size:15px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);border-bottom:2px solid transparent}
+  .tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+  .pane{padding:10px 12px 18px;display:none;flex-direction:column;gap:10px}
+  .pane.active{display:flex}
+  .search{width:100%}
+  .cat{display:flex;flex-direction:column;gap:6px}
+  .cat h3{margin:8px 0 2px;font-family:"Barlow Condensed",sans-serif;font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+  .chips{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+  .chip{display:grid;grid-template-columns:14px minmax(0,1fr);min-width:0;gap:7px;align-items:center;padding:6px 8px;background:var(--card);color:#1E211D;border:1.5px solid #C8202F;border-radius:3px;cursor:grab;user-select:none;text-align:left}
+  .chip:hover{box-shadow:var(--shadow)}
+  .chip .sw{width:14px;height:14px;border-radius:50%;border:1px solid rgba(0,0,0,.25)}
+  .chip .sw.box{border-radius:2px}
+  .chip .sw.long{border-radius:7px;height:8px}
+  .chip .sw.leaf{border-radius:40% 60% 45% 55%}
+  .chip .nm{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:.02em;line-height:1.1;overflow-wrap:anywhere}
+  .chip .pr{font-size:11px;color:#555;font-variant-numeric:tabular-nums}
+  .chip[aria-disabled="true"]{opacity:.5;cursor:default}
+  .fixList{display:flex;flex-direction:column;gap:4px}
+  .fixList button{text-align:left;display:flex;justify-content:space-between;gap:8px;background:transparent;border-color:transparent}
+  .fixList button:hover{background:var(--panel-2)}
+  .fixList button.sel{background:var(--accent-soft);border-color:var(--accent)}
+  .fixList .t{color:var(--muted);font-size:12px}
+  .addRow{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .stage{grid-area:stage;position:relative;background:var(--stage);min-width:0;min-height:0}
+  canvas.gl{display:block;width:100%;height:100%;touch-action:none;outline:none}
+  .hint{position:absolute;left:12px;bottom:10px;background:color-mix(in srgb,var(--panel) 88%,transparent);border:1px solid var(--line);border-radius:4px;padding:6px 10px;font-size:12px;color:var(--muted);pointer-events:none;max-width:520px}
+  .hint b{color:var(--ink);font-weight:600}
+  .ghost{position:absolute;pointer-events:none;display:none;transform:translate(-50%,-120%);background:var(--card);color:#1E211D;border:2px solid #C8202F;border-radius:3px;padding:4px 10px;font-family:"Barlow Condensed",sans-serif;font-weight:700;text-transform:uppercase;font-size:14px;box-shadow:var(--shadow);z-index:5}
+  .viewBtns{position:absolute;right:12px;top:10px;display:flex;gap:6px}
+  .viewBtns button{background:color-mix(in srgb,var(--panel) 92%,transparent)}
+  .insp{padding:12px;display:flex;flex-direction:column;gap:12px}
+  .insp h2{margin:0;font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:20px;text-transform:uppercase;letter-spacing:.03em}
+  .insp h3{margin:0;font-family:"Barlow Condensed",sans-serif;font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+  .insp .empty{color:var(--muted);line-height:1.5}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:6px 10px;align-items:center}
+  .kv label{color:var(--muted);font-size:13px}
+  .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .row input[type=text]{flex:1}
+  .secGrid{display:grid;gap:4px}
+  .secCell{border:1px solid var(--line-2);border-radius:3px;padding:4px 6px;font-size:11px;font-family:"Barlow Condensed",sans-serif;font-weight:600;text-transform:uppercase;line-height:1.1;min-height:34px;display:flex;align-items:center;gap:5px;background:var(--panel-2);cursor:pointer;text-align:left}
+  .secCell .sw{width:10px;height:10px;border-radius:50%;flex:none;border:1px solid rgba(0,0,0,.25)}
+  .secCell.sel{border-color:var(--accent);background:var(--accent-soft)}
+  .secCell.empty{color:var(--muted);font-weight:500}
+  .rowLabel{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:6px 0 2px}
+  .priceCard{background:var(--card);color:#1E211D;border:2px solid #C8202F;border-radius:3px;padding:8px 10px;display:grid;gap:2px}
+  .priceCard .top{font-family:"Barlow Condensed",sans-serif;font-weight:700;color:#C8202F;font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+  .priceCard .nm{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:20px;text-transform:uppercase;line-height:1}
+  .priceCard .pr{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:26px;font-variant-numeric:tabular-nums;line-height:1}
+  .priceCard .pr small{font-size:12px;letter-spacing:.06em;margin-left:6px}
+  footer.foot{grid-area:foot;display:flex;gap:16px;align-items:center;padding:5px 14px;background:var(--panel);border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+  footer .dot{width:8px;height:8px;border-radius:50%;background:var(--ok);display:inline-block;margin-right:6px;vertical-align:middle}
+  footer .dot.local{background:var(--muted)}
+  .io{display:none;flex-direction:column;gap:6px}
+  .io.open{display:flex}
+  .io textarea{width:100%;height:110px;font:12px/1.3 ui-monospace,Menlo,Consolas,monospace;background:var(--panel-2);color:var(--ink);border:1px solid var(--line-2);border-radius:4px;padding:6px}
+  .note{font-size:12px;color:var(--muted);line-height:1.45}
+  @media (max-width: 980px){
+    .app{grid-template-columns:1fr;grid-template-rows:auto 1fr auto auto;grid-template-areas:"top" "stage" "left" "foot"}
+    aside.right{position:absolute;right:0;top:0;bottom:0;width:min(290px,85vw);z-index:6;box-shadow:var(--shadow);display:none}
+    aside.right.open{display:flex}
+    aside.left{max-height:34vh}
+  }
+  @media (prefers-reduced-motion: reduce){ *{transition:none!important;animation:none!important} }
+</style>
+
+<div class="app">
+  <header class="top">
+    <div class="brand"><span class="name">Wagga Fruit Supply</span><span class="sub">Floor planner</span></div>
+    <div class="seg" role="group" aria-label="View">
+      <button id="v3d" aria-pressed="true">3D</button>
+      <button id="vtop" aria-pressed="false">Top-down</button>
+    </div>
+    <div class="spacer"></div>
+    <div class="saveBar">
+      <select id="layoutSel" aria-label="Saved layouts"><option value="">Saved layouts…</option></select>
+      <button id="loadBtn" title="Load selected layout">Load</button>
+      <button id="delBtn" class="danger" title="Delete selected layout">Delete</button>
+      <input id="layoutName" type="text" placeholder="Layout name, e.g. Spring 2026" aria-label="Layout name">
+      <button id="saveBtn" class="primary">Save</button>
+      <button id="ioBtn" class="ghost" title="Copy or paste layout text">Export</button>
+    </div>
+  </header>
+
+  <aside class="left">
+    <div class="tabs" role="tablist">
+      <button role="tab" aria-selected="true" data-tab="produce">Produce</button>
+      <button role="tab" aria-selected="false" data-tab="fixtures">Fixtures</button>
+      <button role="tab" aria-selected="false" data-tab="help">How to</button>
+    </div>
+    <div class="pane active" data-pane="produce">
+      <input class="search" id="search" type="search" placeholder="Search produce…" aria-label="Search produce">
+      <div id="catalog"></div>
+    </div>
+    <div class="pane" data-pane="fixtures">
+      <h3 class="rowLabel">Add a fixture</h3>
+      <div class="addRow">
+        <button data-add="island">Island table</button>
+        <button data-add="wallshelf">Wall shelf</button>
+        <button data-add="fridge">Fridge</button>
+        <button data-add="crates">Crate stack</button>
+        <button data-add="boxes">Box stack</button>
+        <button data-add="checkout">Counter</button>
+        <button data-add="scale">Hanging scale</button>
+        <button data-add="stand">Display stand</button>
+      </div>
+      <h3 class="rowLabel">In the shop</h3>
+      <div class="fixList" id="fixList"></div>
+      <button id="resetBtn" class="ghost" style="margin-top:8px">Reset to photo layout</button>
+    </div>
+    <div class="pane" data-pane="help">
+      <p class="note"><b>Move a table</b>: click it, then drag it across the floor. It snaps to a 25 cm grid. Press <b>R</b> to turn it 15°, <b>Shift+R</b> for 90°.</p>
+      <p class="note"><b>Move produce</b>: drag a bed of produce onto another bed to swap the two. Or drag a produce card from the list straight onto a bed.</p>
+      <p class="note"><b>Prices</b>: click a bed and edit the price card on the right. Cards render in the 3D view.</p>
+      <p class="note"><b>Camera</b>: drag empty floor to orbit, scroll to zoom, right-drag or two fingers to pan. Top-down gives a plan view.</p>
+      <p class="note"><b>Save</b>: type a name and Save. Saved layouts are shared with everyone who opens this page. Your working copy also autosaves in this browser.</p>
+      <p class="note">Room is 26 × 16 m and fixtures are placed from the photos, so treat sizes as approximate until you've measured and adjusted them in the inspector.</p>
+    </div>
+  </aside>
+
+  <div class="stage">
+    <canvas class="gl" id="gl" tabindex="0" aria-label="3D shop floor"></canvas>
+    <div class="viewBtns">
+      <button id="fitBtn" title="Fit whole shop in view">Fit</button>
+      <button id="inspBtn" title="Open inspector" style="display:none">Details</button>
+    </div>
+    <div class="hint" id="hint"><b>Click</b> a table or bed to select it. <b>Drag</b> tables to move, drag beds to swap produce. <b>R</b> rotates.</div>
+    <div class="ghost" id="ghost"></div>
+  </div>
+
+  <aside class="right" id="rightPane">
+    <div class="insp" id="insp"></div>
+    <div class="insp io" id="io">
+      <h3>Layout text</h3>
+      <textarea id="ioText" aria-label="Layout JSON"></textarea>
+      <div class="row">
+        <button id="copyBtn">Copy</button>
+        <button id="applyBtn">Apply pasted text</button>
+        <button id="ioClose" class="ghost">Close</button>
+      </div>
+      <p class="note">Paste this into a message to share a layout with someone who doesn't have access to this page.</p>
+    </div>
+  </aside>
+
+  <footer class="foot">
+    <span id="stStore"><span class="dot local"></span>Working copy saved in this browser</span>
+    <span id="stSel"></span>
+    <span class="spacer"></span>
+    <span id="stCount"></span>
+  </footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+'use strict';
+const T = THREE;
+const $ = (s, r=document) => r.querySelector(s);
+const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
+
+/* ───────────── Produce catalogue (from the price cards in the photos) ───────────── */
+// shape: sphere | box | long | leaf | big
+const CAT = [
+  ['Fruit', [
+    ['apple_pinklady','Apple Pink Lady','#D9536A','sphere',.08,'3.90','kg'],
+    ['apple_gala','Apple Gala','#C93A3F','sphere',.08,'3.90','kg'],
+    ['apple_granny','Apple Granny Smith','#8DC441','sphere',.08,'3.90','kg'],
+    ['apple_fuji','Apple Fuji','#D8615C','sphere',.08,'3.90','kg'],
+    ['apple_red','Apple Red Delicious','#8E1B26','sphere',.08,'3.90','kg'],
+    ['pear','Pear Packham','#B9CB5B','sphere',.08,'3.90','kg'],
+    ['banana','Banana','#F2D23A','long',.05,'3.90','kg'],
+    ['mandarin_imp','Mandarin Imperial','#F28C1A','sphere',.065,'4.90','kg'],
+    ['mandarin','Mandarin','#F0741C','sphere',.07,'3.90','kg'],
+    ['orange','Orange Navel','#F58A1F','sphere',.085,'3.50','kg'],
+    ['orange_bag','Orange 3kg Bag','#F07A1C','box',.22,'6.90','ea'],
+    ['lemon','Lemon','#F5D93A','sphere',.065,'4.90','kg'],
+    ['lime','Lime','#6FA83A','sphere',.055,'9.90','kg'],
+    ['pineapple','Pineapple','#C9A23A','box',.16,'4.50','ea'],
+    ['strawberry','Strawberry','#C3202F','box',.14,'2.90','pnt'],
+    ['avocado','Avocado','#2E3D1F','sphere',.08,'1.00','ea'],
+    ['papaya','Papaya','#E3B83B','long',.1,'8.90','kg'],
+    ['rockmelon','Rockmelon','#C8B98A','big',.19,'4.50','ea'],
+    ['watermelon','Watermelon','#2F6B3A','big',.3,'1.90','kg'],
+    ['grapes','Grapes Seedless','#8DBF5A','box',.14,'7.90','kg'],
+    ['kiwi','Kiwi Fruit','#7A6A45','sphere',.06,'6.90','kg'],
+  ]],
+  ['Veg', [
+    ['tomato','Tomato','#D9322B','sphere',.075,'3.60','kg'],
+    ['tomato_bag','Tomato Pre-packed','#D9322B','box',.2,'3.60','ea'],
+    ['cherry_tom','Cherry Tomato','#C22B2B','box',.13,'3.90','pnt'],
+    ['cuc_leb','Cucumber Lebanese','#3F7A2E','long',.045,'7.50','kg'],
+    ['cuc_tele','Cucumber Telegraph','#2E6B2E','long',.05,'2.90','ea'],
+    ['zucchini','Zucchini','#2F5E2B','long',.05,'4.80','kg'],
+    ['squash','Squash Yellow','#E9D23C','sphere',.06,'9.90','kg'],
+    ['cap_red','Capsicum Red','#C9202B','sphere',.09,'5.90','kg'],
+    ['cap_green','Capsicum Green','#3E8E3A','sphere',.09,'5.90','kg'],
+    ['eggplant','Eggplant','#3A1F4D','long',.09,'5.90','kg'],
+    ['eggplant_leb','Eggplant Lebanese','#4A2A5E','long',.045,'9.90','kg'],
+    ['beans','Beans','#5FA33A','long',.02,'6.90','kg'],
+    ['snake_beans','Snake Beans','#6DAF3E','long',.018,'14.90','kg'],
+    ['brussels','Brussels Sprouts','#7FB84A','sphere',.04,'6.90','kg'],
+    ['corn','Corn','#D9D08A','long',.06,'1.50','ea'],
+    ['choko','Choko','#B9D67A','sphere',.09,'9.90','kg'],
+    ['mushroom','Mushrooms','#E6DCC8','sphere',.045,'12.90','kg'],
+    ['pumpkin_butter','Pumpkin Butternut','#E6B27A','long',.13,'2.90','kg'],
+    ['pumpkin_grey','Pumpkin Grey Whole','#6E7B5E','big',.26,'2.25','kg'],
+    ['pumpkin_cut','Pumpkin Cut','#F08A24','box',.15,'2.90','kg'],
+    ['cabbage','Cabbage Green','#B7CF8B','big',.2,'4.90','ea'],
+    ['lettuce','Lettuce Iceberg','#B9D97A','big',.17,'3.30','ea'],
+    ['cauliflower','Cauliflower','#F0EEDC','big',.18,'3.90','ea'],
+    ['broccoli','Broccoli','#3F7A3A','leaf',.13,'4.90','kg'],
+  ]],
+  ['Greens & herbs', [
+    ['silverbeet','Silverbeet Local','#2F6B2E','leaf',.16,'3.50','bnch'],
+    ['kang_kong','Kang Kong','#5B9F3C','leaf',.14,'3.50','bnch'],
+    ['spinach','English Spinach','#3B7F35','leaf',.12,'3.90','bnch'],
+    ['bok_choy','Buk Choy','#A8CF7A','leaf',.13,'2.40','ea'],
+    ['wombok','Wom Buk','#CFE3A2','big',.16,'4.50','ea'],
+    ['celery','Celery Bunch','#9FCB6A','long',.09,'3.50','ea'],
+    ['leek','Leek','#B9D48E','long',.04,'2.40','ea'],
+    ['spring_onion','Spring Onion','#7FB85A','long',.03,'3.30','bnch'],
+    ['eshallot','Eshallot','#88B95C','long',.03,'2.90','bnch'],
+    ['kale','Kale','#3E6E3A','leaf',.15,'3.30','ea'],
+    ['rhubarb','Rhubarb','#B3253A','long',.04,'5.90','bnch'],
+    ['chicory','Chicory','#7FAE58','leaf',.14,'5.90','ea'],
+    ['coriander','Coriander','#5FA33A','leaf',.11,'2.90','bnch'],
+    ['herbs','Fresh Herbs','#6CA84A','leaf',.09,'2.90','bnch'],
+    ['lemongrass','Lemon Grass','#C9D28E','long',.03,'1.40','ea'],
+  ]],
+  ['Roots', [
+    ['carrot','Carrot','#F07A1C','long',.04,'3.90','kg'],
+    ['carrot_bag','Carrot 1kg Bag','#F07A1C','box',.17,'1.90','ea'],
+    ['carrot_juice','Juicing Carrots 5kg','#F3841F','box',.3,'6.90','ea'],
+    ['parsnip','Parsnip','#E8DDB5','long',.045,'7.90','kg'],
+    ['turnip','Turnip','#EAE3D0','sphere',.075,'7.90','kg'],
+    ['radish','Radish','#C42B4A','sphere',.035,'3.70','bnch'],
+    ['beetroot','Beetroot','#6E1F3A','sphere',.07,'4.90','kg'],
+    ['taro','Taro','#6B4A35','long',.09,'16.00','kg'],
+    ['ginger','Ginger','#C79A5A','leaf',.07,'19.90','kg'],
+    ['garlic','Garlic','#EDE9E2','sphere',.05,'24.90','kg'],
+    ['sweet_potato','Sweet Potato','#B8552B','long',.07,'3.50','kg'],
+  ]],
+  ['Onions & potatoes', [
+    ['onion_brown','Onion Brown Loose','#B77B3A','sphere',.07,'3.90','kg'],
+    ['onion_red','Onion Red Loose','#7A2C58','sphere',.07,'4.90','kg'],
+    ['onion_white','Onion White Loose','#EDE6DA','sphere',.07,'4.90','kg'],
+    ['onion_bag','Onion Brown 10kg','#C56A3A','box',.34,'9.90','bag'],
+    ['onion_red_bag','Onion Red 1kg Bag','#8A3A66','box',.17,'3.90','ea'],
+    ['potato_brushed','Potato Loose Brushed','#A8865A','sphere',.08,'2.90','kg'],
+    ['potato_washed','Potato Washed','#E3C98A','sphere',.075,'3.90','kg'],
+    ['potato_white','Potato White','#E7D9A6','sphere',.075,'3.90','kg'],
+    ['potato_red','Potato Red','#B44E3A','sphere',.075,'4.99','kg'],
+    ['potato_bag','Potato 5kg Bag','#3557A8','box',.3,'9.90','ea'],
+    ['potato_punnet','Potato Chats Punnet','#E3C98A','box',.15,'3.90','ea'],
+  ]],
+  ['Other', [
+    ['eggs','700 Gram Eggs','#D8B98F','box',.24,'5.50','doz'],
+    ['eggs_free','Free Range Eggs 800g','#CDAA7C','box',.24,'7.90','doz'],
+    ['honey','Wild Nectar Honey','#C98A2A','box',.09,'12.90','ea'],
+    ['boxes_apple','Batlow Apple Boxes','#2F6B3A','box',.4,'',''],
+    ['flowers','Flowers','#D66AA5','leaf',.14,'12.00','bnch'],
+  ]],
+];
+const PRODUCE = {};
+CAT.forEach(([cat, items]) => items.forEach(([id,name,color,shape,size,price,unit]) => PRODUCE[id] = {id,name,color,shape,size,price,unit,cat}));
+
+/* ───────────── Default layout, approximated from the photos ───────────── */
+const ROOM = { w: 26, d: 16, h: 3.2,
+  // wall paint segments, per wall, measured along the wall from its left end when facing it from inside
+  walls: {
+    back:  [[0,8,'#B5D63A'],[8,11,'#F08A24'],[11,26,'#F2C21B']],
+    right: [[0,16,'#B5D63A']],
+    left:  [[0,16,'#F08A24']],
+    front: [[0,26,'#E8E2D6']],
+  },
+  sign: { x: 18, wall: 'back' },
+  door: { x: 13, w: 3.2 },
+};
+let uid = 1;
+const nid = () => 'f' + (uid++) + Math.random().toString(36).slice(2,6);
+function fx(type, name, x, z, w, d, rot, rows, cols, items, extra){
+  const sections = [];
+  const n = rows*cols;
+  for (let i=0;i<n;i++){
+    const it = items && items[i];
+    if (!it) { sections.push({produce:null}); continue; }
+    const [pid, price] = it.split('@');
+    const p = PRODUCE[pid];
+    sections.push({produce: pid, price: price ?? (p ? p.price : ''), unit: p ? p.unit : 'kg'});
+  }
+  return Object.assign({id:nid(), type, name, x, z, w, d, rot, rows, cols, sections}, extra||{});
+}
+function defaultLayout(){
+  return { room: JSON.parse(JSON.stringify(ROOM)), fixtures: [
+    // back wall, left to right
+    fx('wallshelf','Onion & potato wall', 4.25, 0.55, 7.5, 1.0, 0, 3, 8, [
+      'onion_bag','onion_bag','onion_bag','onion_bag','onion_bag','potato_bag','potato_bag','potato_bag',
+      'onion_brown','onion_red','onion_white','garlic','sweet_potato','potato_white','potato_red','potato_brushed',
+      'onion_brown','onion_brown','onion_red_bag','onion_red_bag','potato_bag','sweet_potato','potato_washed','potato_punnet']),
+    fx('wallshelf','Bagged potatoes', 9.75, 0.55, 2.6, 1.0, 0, 2, 2, ['potato_bag','potato_bag','potato_brushed','sweet_potato']),
+    fx('wallshelf','Greens wall', 18, 0.55, 12, 1.0, 0, 1, 12, [
+      'cauliflower','broccoli','chicory','leek','rhubarb','wombok','bok_choy','spinach','eshallot','celery','kale','herbs']),
+    // right wall
+    fx('wallshelf','Capsicum & cucumber wall', 25.45, 5.5, 9, 1.0, -90, 2, 8, [
+      'garlic','potato_washed','mushroom','cap_red','cap_green','eggplant','cuc_leb','cuc_tele',
+      null,null,null,'eggs','eggs','eggs','eggs_free',null]),
+    fx('stand','Wild Nectar stand', 25.3, 11.2, 0.9, 0.6, -90, 1, 1, ['honey']),
+    // islands
+    fx('island','Pumpkin & lettuce island', 11.5, 3.4, 5.5, 2.2, 0, 1, 6, ['pumpkin_butter','pumpkin_grey','pumpkin_cut','cauliflower','lettuce','cabbage']),
+    fx('island','Apple island', 18.5, 5.2, 12, 2.6, 0, 2, 6, [
+      'apple_pinklady','apple_granny','apple_gala','apple_fuji','pear','banana',
+      'tomato','cherry_tom','avocado','rockmelon','watermelon','pineapple']),
+    fx('island','Tomato island', 6.5, 5.8, 6, 2.4, 0, 2, 4, [
+      'tomato','tomato','cherry_tom','mushroom',
+      'carrot_bag','carrot_juice','tomato_bag','carrot_bag']),
+    fx('island','Citrus & veg island', 8.5, 9.6, 13, 2.6, 0, 2, 9, [
+      'zucchini','beans','brussels','spring_onion','garlic','eggplant_leb','choko','parsnip','carrot',
+      'corn','snake_beans','banana','pineapple','lime','lemon','orange','orange','orange_bag']),
+    fx('island','Mandarin island', 20.5, 9.4, 4.5, 2.2, 0, 1, 3, ['mandarin_imp','mandarin','avocado']),
+    fx('crates','Papaya crates', 18.1, 10.4, 0.7, 0.5, 0, 1, 1, ['papaya']),
+    fx('boxes','Strawberry boxes', 22.9, 10.4, 0.7, 0.5, 0, 1, 1, ['strawberry']),
+    fx('island','Kang kong table', 22, 13, 3.5, 2.0, 0, 1, 4, ['potato_punnet','kang_kong','silverbeet','coriander']),
+    fx('crates','Cabbage bin', 1.5, 3.2, 1.2, 1.0, 0, 1, 1, ['cabbage']),
+    fx('boxes','Batlow boxes', 1.0, 6.0, 0.6, 0.5, 90, 1, 1, ['boxes_apple']),
+    // front wall
+    fx('fridge','Herb fridge', 5.5, 15.5, 4, 0.8, 180, 3, 4, ['herbs','coriander','spinach','lettuce','mushroom','grapes','strawberry','flowers','kiwi','beetroot','lemongrass','radish']),
+    fx('fridge','Salad fridge', 9.5, 15.5, 3, 0.8, 180, 3, 3, ['lettuce','spinach','herbs','cherry_tom','grapes','strawberry','flowers','kiwi','beetroot']),
+    fx('checkout','Counter', 19, 14.9, 3.2, 1.2, 180, 0, 0, []),
+    fx('scale','Scale', 12.5, 7.7, 0.6, 0.6, 0, 0, 0, []),
+    fx('scale','Scale', 20, 3.4, 0.6, 0.6, 0, 0, 0, []),
+    fx('scale','Scale', 4.5, 8.2, 0.6, 0.6, 0, 0, 0, []),
+  ]};
+}
+
+/* ───────────── State ───────────── */
+const LS_KEY = 'wfs-planner-current-v1';
+let layout = loadLocal() || defaultLayout();
+let selectedFixture = null;     // id
+let selectedSection = null;     // {fid, idx}
+let viewMode = '3d';
+let loadedLayoutId = '';
+
+function loadLocal(){ try { const s = localStorage.getItem(LS_KEY); if (!s) return null; const j = JSON.parse(s); return (j && j.fixtures) ? j : null; } catch(e){ return null; } }
+let saveTimer = 0;
+function autosave(){ clearTimeout(saveTimer); saveTimer = setTimeout(() => { try { localStorage.setItem(LS_KEY, JSON.stringify(layout)); } catch(e){} }, 300); }
+const fixtureById = id => layout.fixtures.find(f => f.id === id);
+
+/* ───────────── Three.js scene ───────────── */
+const canvas = $('#gl');
+const renderer = new T.WebGLRenderer({canvas, antialias:true, alpha:false});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
+renderer.outputEncoding = T.sRGBEncoding;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = T.PCFSoftShadowMap;
+const scene = new T.Scene();
+const camera = new T.PerspectiveCamera(48, 1, 0.1, 200);
+const cam = { target: new T.Vector3(13, 0.6, 8.5), theta: 0.35, phi: 1.02, dist: 24 };
+function applyCamera(){
+  if (viewMode === 'top'){
+    camera.position.set(cam.target.x, cam.dist, cam.target.z + 0.001);
+    camera.up.set(0,0,-1);
+  } else {
+    camera.up.set(0,1,0);
+    const sp = Math.sin(cam.phi), cp = Math.cos(cam.phi);
+    camera.position.set(cam.target.x + cam.dist*sp*Math.sin(cam.theta), cam.target.y + cam.dist*cp, cam.target.z + cam.dist*sp*Math.cos(cam.theta));
+  }
+  camera.lookAt(cam.target);
+}
+function fitView(){ cam.target.set(layout.room.w/2, 0.6, layout.room.d/2 + 0.5); cam.theta = 0.35; cam.phi = 1.02; cam.dist = Math.max(layout.room.w, layout.room.d) * 0.95; if (viewMode==='top') cam.dist = Math.max(layout.room.w, layout.room.d)*0.85; applyCamera(); }
+
+// lights
+scene.add(new T.HemisphereLight(0xffffff, 0x7f7a70, 0.72));
+const sun = new T.DirectionalLight(0xfff5e6, 0.95);
+sun.position.set(4, 20, 24); sun.castShadow = true; sun.target.position.set(13, 0, 8); scene.add(sun.target);
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -20; sun.shadow.camera.right = 20; sun.shadow.camera.top = 20; sun.shadow.camera.bottom = -20;
+sun.shadow.camera.near = 1; sun.shadow.camera.far = 60; sun.shadow.bias = -0.0008;
+scene.add(sun);
+const fill = new T.DirectionalLight(0xdfe8ff, 0.3); fill.position.set(18, 12, -8); scene.add(fill);
+
+/* textures */
+function cvs(w,h){ const c=document.createElement('canvas'); c.width=w; c.height=h; return [c, c.getContext('2d')]; }
+function rnd(a,b){ return a + Math.random()*(b-a); }
+const TEX = {};
+TEX.timber = (function(){
+  const [c,x] = cvs(512,256);
+  for (let i=0;i<8;i++){ x.fillStyle = i%2 ? '#C39B62' : '#D2AE78'; x.fillRect(0,i*32,512,32);
+    for (let g=0; g<6; g++){ x.strokeStyle='rgba(110,70,30,.16)'; x.lineWidth=1; x.beginPath(); const y=i*32+rnd(2,30); x.moveTo(0,y); x.bezierCurveTo(150,y+rnd(-4,4),350,y+rnd(-4,4),512,y+rnd(-3,3)); x.stroke(); }
+    x.fillStyle='rgba(40,25,10,.6)'; x.fillRect(0,i*32+30,512,2); }
+  const t = new T.CanvasTexture(c); t.wrapS=t.wrapT=T.RepeatWrapping; t.encoding=T.sRGBEncoding; return t;
+})();
+TEX.darkTimber = (function(){
+  const [c,x] = cvs(256,256); x.fillStyle='#4A3624'; x.fillRect(0,0,256,256);
+  for (let g=0; g<40; g++){ x.strokeStyle='rgba(0,0,0,.18)'; x.beginPath(); const y=rnd(0,256); x.moveTo(0,y); x.bezierCurveTo(80,y+rnd(-3,3),180,y+rnd(-3,3),256,y); x.stroke(); }
+  const t = new T.CanvasTexture(c); t.wrapS=t.wrapT=T.RepeatWrapping; t.encoding=T.sRGBEncoding; return t;
+})();
+TEX.floor = (function(){
+  const [c,x] = cvs(512,512); x.fillStyle='#8E8B84'; x.fillRect(0,0,512,512);
+  for (let i=0;i<9000;i++){ x.fillStyle = `rgba(${Math.random()<.5?0:255},${Math.random()<.5?0:255},${Math.random()<.5?0:255},${rnd(.02,.07)})`; x.fillRect(rnd(0,512), rnd(0,512), rnd(1,3), rnd(1,3)); }
+  for (let i=0;i<14;i++){ x.fillStyle=`rgba(60,58,52,${rnd(.04,.12)})`; x.beginPath(); x.ellipse(rnd(0,512),rnd(0,512),rnd(30,120),rnd(20,80),rnd(0,3),0,6.3); x.fill(); }
+  const t = new T.CanvasTexture(c); t.wrapS=t.wrapT=T.RepeatWrapping; t.repeat.set(6,4); t.encoding=T.sRGBEncoding; return t;
+})();
+function blockTex(hex, lenM){
+  const [c,x] = cvs(1024,256);
+  x.fillStyle = hex; x.fillRect(0,0,1024,256);
+  x.fillStyle = 'rgba(0,0,0,.14)';
+  const bh = 256/16, bw = 1024/ (lenM*2.5); // 0.2m courses, 0.4m blocks
+  for (let r=0;r<16;r++){ x.fillRect(0, r*bh, 1024, 1.5); const off = r%2 ? bw/2 : 0; for (let cx=off; cx<1024; cx+=bw) x.fillRect(cx, r*bh, 1.5, bh); }
+  const t = new T.CanvasTexture(c); t.encoding=T.sRGBEncoding; return t;
+}
+function makeSignTex(){
+  const [c,x] = cvs(1024,200);
+  x.fillStyle='#C8202F'; x.fillRect(0,0,1024,200);
+  x.fillStyle='#FFFFFF'; x.beginPath(); x.ellipse(90,100,70,70,0,0,6.3); x.fill();
+  const fr=['#F2C21B','#E0432B','#8DC441','#F08A24','#7A2C58']; fr.forEach((f,i)=>{ x.fillStyle=f; x.beginPath(); x.arc(70+i*12, 110-(i%2)*18, 16, 0, 6.3); x.fill(); });
+  x.fillStyle='#F2C21B'; x.font='italic 600 46px "Barlow Condensed", sans-serif'; x.fillText('Wagga', 190, 62);
+  x.fillStyle='#FFFFFF'; x.font='700 110px "Barlow Condensed", sans-serif'; x.fillText('Fruit Supply', 185, 165);
+  x.fillStyle='#F2C21B'; x.font='italic 600 40px "Barlow Condensed", sans-serif'; x.fillText('"The Classic Fruit Shop"', 660, 90);
+  x.font='600 30px "Barlow Condensed", sans-serif'; x.fillText('Est: 1992', 760, 140);
+  const t = new T.CanvasTexture(c); t.encoding=T.sRGBEncoding; return t;
+}
+TEX.sign = makeSignTex();
+const labelCache = new Map();
+function labelTex(name, price, unit){
+  const key = name+'|'+price+'|'+unit;
+  if (labelCache.has(key)) return labelCache.get(key);
+  const [c,x] = cvs(256,160);
+  x.fillStyle='#FFFFFF'; x.fillRect(0,0,256,160);
+  x.strokeStyle='#C8202F'; x.lineWidth=10; x.strokeRect(5,5,246,150);
+  x.fillStyle='#C8202F'; x.font='700 15px "Barlow Condensed", sans-serif'; x.textAlign='center'; x.fillText('WAGGA FRUIT SUPPLY', 128, 30);
+  x.fillStyle='#1E211D';
+  let fs = 26; x.font=`700 ${fs}px "Barlow Condensed", sans-serif`;
+  while (x.measureText(name.toUpperCase()).width > 224 && fs > 14){ fs -= 2; x.font=`700 ${fs}px "Barlow Condensed", sans-serif`; }
+  x.fillText(name.toUpperCase(), 128, 64);
+  if (price){ x.font='700 52px "Barlow Condensed", sans-serif'; x.fillText('$ '+price, 118, 125); x.font='700 16px "Barlow Condensed", sans-serif'; x.textAlign='right'; x.fillText(unit.toUpperCase(), 238, 138); }
+  const t = new T.CanvasTexture(c); t.encoding=T.sRGBEncoding; t.minFilter=T.LinearFilter; labelCache.set(key, t); return t;
+}
+
+/* materials & geometries */
+const MAT = {
+  black: new T.MeshStandardMaterial({color:0x1b1b1b, roughness:.7, metalness:.2}),
+  bed: new T.MeshStandardMaterial({color:0x262624, roughness:.95}),
+  bedSel: new T.MeshStandardMaterial({color:0x262624, roughness:.95, emissive:0xC8202F, emissiveIntensity:.55}),
+  bedHover: new T.MeshStandardMaterial({color:0x262624, roughness:.95, emissive:0xF2C21B, emissiveIntensity:.5}),
+  glass: new T.MeshStandardMaterial({color:0x9ecfe8, transparent:true, opacity:.28, roughness:.1, metalness:.1}),
+  white: new T.MeshStandardMaterial({color:0xECECE8, roughness:.6}),
+  crate: new T.MeshStandardMaterial({color:0x1e1e1e, roughness:.8}),
+  cardboard: new T.MeshStandardMaterial({color:0xA07C55, roughness:.9}),
+  blue: new T.MeshStandardMaterial({color:0x4C8FD6, roughness:.4, metalness:.3}),
+  steel: new T.MeshStandardMaterial({color:0xB8BCC0, roughness:.35, metalness:.7}),
+  counter: new T.MeshStandardMaterial({color:0x3C3F3A, roughness:.6}),
+  darkTimber: new T.MeshStandardMaterial({map:TEX.darkTimber, roughness:.8}),
+  green: new T.MeshStandardMaterial({color:0x2F6B3A, roughness:.8}),
+  pick: new T.MeshBasicMaterial({visible:false}),
+};
+const GEO = {
+  sphere: new T.SphereGeometry(0.5, 10, 8),
+  big: new T.SphereGeometry(0.5, 14, 10),
+  box: new T.BoxGeometry(1, 0.55, 1),
+  long: new T.CylinderGeometry(0.5, 0.5, 1, 9),
+  leaf: new T.IcosahedronGeometry(0.5, 0),
+  unit: new T.BoxGeometry(1,1,1),
+};
+function timberMat(w){ const t = TEX.timber.clone(); t.needsUpdate = true; t.repeat.set(Math.max(1, w/1.6), 1); return new T.MeshStandardMaterial({map:t, roughness:.75}); }
+
+/* room */
+const roomGroup = new T.Group(); scene.add(roomGroup);
+function buildRoom(){
+  while (roomGroup.children.length) roomGroup.remove(roomGroup.children[0]);
+  const R = layout.room;
+  const floor = new T.Mesh(new T.PlaneGeometry(R.w, R.d), new T.MeshStandardMaterial({map:TEX.floor, roughness:.95}));
+  floor.rotation.x = -Math.PI/2; floor.position.set(R.w/2, 0, R.d/2); floor.receiveShadow = true; floor.userData.isFloor = true; roomGroup.add(floor);
+  // apron outside room
+  const apron = new T.Mesh(new T.PlaneGeometry(R.w+40, R.d+40), new T.MeshStandardMaterial({color: stageColor(), roughness:1}));
+  apron.rotation.x = -Math.PI/2; apron.position.set(R.w/2, -0.01, R.d/2); roomGroup.add(apron);
+  function wall(name, len, place){
+    const segs = R.walls[name] || [[0,len,'#DDD']];
+    segs.forEach(([a,b,hex]) => {
+      const L = b-a; if (L<=0) return;
+      const m = new T.Mesh(new T.BoxGeometry(L, R.h, 0.2), new T.MeshStandardMaterial({map: blockTex(hex, L), roughness:.9}));
+      m.receiveShadow = true; m.castShadow = false; place(m, a + L/2); roomGroup.add(m);
+    });
+  }
+  wall('back', R.w, (m,c) => { m.position.set(c, R.h/2, -0.1); });
+  wall('front', R.w, (m,c) => { m.position.set(R.w - c, R.h/2, R.d + 0.1); m.rotation.y = Math.PI; m.material.transparent = true; m.material.opacity = 0.28; m.material.depthWrite = false; m.receiveShadow = false; });
+  wall('left', R.d, (m,c) => { m.position.set(-0.1, R.h/2, R.d - c); m.rotation.y = Math.PI/2; });
+  wall('right', R.d, (m,c) => { m.position.set(R.w + 0.1, R.h/2, c); m.rotation.y = -Math.PI/2; });
+  // entry door on front wall
+  if (R.door){ const d = new T.Mesh(new T.BoxGeometry(R.door.w, 2.4, 0.25), MAT.glass); d.position.set(R.door.x, 1.2, R.d+0.1); roomGroup.add(d);
+    const fr = new T.Mesh(new T.BoxGeometry(R.door.w+0.2, 0.12, 0.3), MAT.black); fr.position.set(R.door.x, 2.46, R.d+0.1); roomGroup.add(fr); }
+  // sign
+  if (R.sign){ const s = new T.Mesh(new T.PlaneGeometry(7.2, 1.4), new T.MeshStandardMaterial({map:TEX.sign, roughness:.6})); s.position.set(R.sign.x, 2.15, 0.01); roomGroup.add(s); }
+  // fluorescent battens
+  for (let x=3; x<R.w; x+=6) for (let z=3; z<R.d; z+=5){ const l = new T.Mesh(new T.BoxGeometry(1.2, 0.06, 0.15), new T.MeshStandardMaterial({color:0xffffff, emissive:0xffffff, emissiveIntensity:.9})); l.position.set(x, R.h-0.05, z); roomGroup.add(l); }
+}
+function stageColor(){ const v = getComputedStyle(document.documentElement).getPropertyValue('--stage').trim() || '#D5D2C8'; return new T.Color(v); }
+
+/* fixtures */
+const fixGroup = new T.Group(); scene.add(fixGroup);
+const built = new Map(); // id -> {group, pick:[], beds:Map(idx->mesh)}
+let pickables = [];
+function rebuildPickables(){ pickables = []; built.forEach(b => pickables.push(...b.pick)); pickables.push(roomGroup.children[0]); }
+
+function bedsFor(f){
+  const beds = []; const rows = f.rows|0, cols = f.cols|0;
+  if (!rows || !cols) return beds;
+  const tiltFor = (depth, drop) => Math.min(T.MathUtils.degToRad(12), Math.asin(Math.min(1, drop/(depth/2))));
+  if (f.type === 'island'){
+    const inset = 0.12, top = 0.90;
+    const depth = (f.d - inset*2) / rows;
+    const sw = (f.w - inset*2) / cols;
+    const tilt = tiltFor(depth, 0.16), lift = (depth/2)*Math.sin(tilt);
+    for (let r=0;r<rows;r++) for (let c=0;c<cols;c++){
+      const front = rows === 1 ? true : r === 0;
+      const zc = rows === 1 ? 0 : (r===0 ? depth/2 : -depth/2);
+      beds.push({x: -f.w/2 + inset + sw*(c+.5), y: top + 0.03 + lift, z: zc, sw, sd: depth, tilt: front ? tilt : -tilt, front, up: 0.28});
+    }
+  } else if (f.type === 'wallshelf'){
+    const sw = f.w / cols;
+    for (let r=0;r<rows;r++){
+      const depth = f.d * (rows - r) / rows;
+      const zc = -f.d/2 + depth/2;
+      const y = 0.55 + r*0.55 + 0.025;
+      const tilt = tiltFor(depth, 0.1), lift = (depth/2)*Math.sin(tilt);
+      for (let c=0;c<cols;c++) beds.push({x: -f.w/2 + sw*(c+.5), y: y+0.02+lift, z: zc, sw, sd: depth, tilt, front:true, up: 0.26});
+    }
+  } else if (f.type === 'fridge'){
+    const sw = (f.w-0.16) / cols;
+    for (let r=0;r<rows;r++){
+      const y = 0.45 + r*0.5;
+      for (let c=0;c<cols;c++) beds.push({x: -f.w/2 + 0.08 + sw*(c+.5), y, z: 0, sw, sd: f.d-0.16, tilt: 0, front:true, up: 0.2, inside:true});
+    }
+  } else if (f.type === 'crates' || f.type === 'boxes' || f.type === 'stand'){
+    const h = f.type==='stand' ? 1.1 : 1.0;
+    beds.push({x:0, y:h+0.02, z:0, sw:f.w, sd:f.d, tilt:0, front:true, up:0.24});
+  }
+  return beds;
+}
+
+function buildFixture(f){
+  const g = new T.Group(); g.userData = {fixtureId: f.id};
+  const pick = []; const beds = new Map();
+  const body = (mesh) => { mesh.castShadow = true; mesh.receiveShadow = true; mesh.userData = {fixtureId: f.id, isBody:true}; g.add(mesh); pick.push(mesh); return mesh; };
+  if (f.type === 'island'){
+    const b = body(new T.Mesh(new T.BoxGeometry(f.w, 0.82, f.d), timberMat(f.w))); b.position.y = 0.41;
+    const rim = body(new T.Mesh(new T.BoxGeometry(f.w+0.06, 0.06, f.d+0.06), MAT.black)); rim.position.y = 0.85;
+    const top = body(new T.Mesh(new T.BoxGeometry(f.w-0.02, 0.04, f.d-0.02), MAT.bed)); top.position.y = 0.88;
+    // steel legs feel: black base plinth
+    const base = body(new T.Mesh(new T.BoxGeometry(f.w-0.1, 0.08, f.d-0.1), MAT.black)); base.position.y = 0.04;
+  } else if (f.type === 'wallshelf'){
+    const back = body(new T.Mesh(new T.BoxGeometry(f.w, 0.5 + f.rows*0.55 + 0.35, 0.05), MAT.darkTimber)); back.position.set(0, (0.5 + f.rows*0.55 + 0.35)/2, -f.d/2 + 0.025);
+    for (let r=0;r<f.rows;r++){
+      const depth = f.d * (f.rows - r) / f.rows;
+      const sh = body(new T.Mesh(new T.BoxGeometry(f.w, 0.05, depth), MAT.darkTimber)); sh.position.set(0, 0.55 + r*0.55, -f.d/2 + depth/2);
+    }
+    const kick = body(new T.Mesh(new T.BoxGeometry(f.w, 0.5, f.d - 0.05), MAT.green)); kick.position.set(0, 0.25, -0.025);
+  } else if (f.type === 'fridge'){
+    const H = 0.45 + f.rows*0.5 + 0.35;
+    const b = body(new T.Mesh(new T.BoxGeometry(f.w, H, f.d), MAT.white)); b.position.y = H/2;
+    const glass = new T.Mesh(new T.BoxGeometry(f.w-0.1, H-0.5, 0.04), MAT.glass); glass.position.set(0, H/2+0.1, f.d/2+0.01); g.add(glass);
+    const frame = body(new T.Mesh(new T.BoxGeometry(f.w, 0.3, f.d+0.02), MAT.black)); frame.position.y = H - 0.15;
+    for (let r=0;r<f.rows;r++){ const sh = new T.Mesh(new T.BoxGeometry(f.w-0.16, 0.03, f.d-0.16), MAT.steel); sh.position.set(0, 0.45 + r*0.5 - 0.02, 0); g.add(sh); }
+  } else if (f.type === 'crates' || f.type === 'boxes'){
+    const n = 4, mat = f.type==='crates' ? MAT.crate : MAT.cardboard;
+    for (let i=0;i<n;i++){ const c = body(new T.Mesh(new T.BoxGeometry(f.w, 0.25, f.d), mat)); c.position.y = 0.125 + i*0.25; }
+  } else if (f.type === 'stand'){
+    const b = body(new T.Mesh(new T.BoxGeometry(f.w, 1.1, f.d), MAT.cardboard)); b.position.y = 0.55;
+    const hdr = body(new T.Mesh(new T.BoxGeometry(f.w, 0.35, 0.03), MAT.cardboard)); hdr.position.set(0, 1.5, -f.d/2);
+  } else if (f.type === 'checkout'){
+    const b = body(new T.Mesh(new T.BoxGeometry(f.w, 0.95, f.d), MAT.counter)); b.position.y = 0.475;
+    const top = body(new T.Mesh(new T.BoxGeometry(f.w+0.04, 0.05, f.d+0.04), MAT.white)); top.position.y = 0.975;
+    const till = body(new T.Mesh(new T.BoxGeometry(0.4, 0.3, 0.3), MAT.black)); till.position.set(f.w/2-0.4, 1.15, 0);
+  } else if (f.type === 'scale'){
+    const wire = new T.Mesh(new T.CylinderGeometry(0.008,0.008, layout.room.h-2.35, 6), MAT.steel); wire.position.y = layout.room.h - (layout.room.h-2.35)/2; g.add(wire);
+    const dial = body(new T.Mesh(new T.CylinderGeometry(0.28,0.28,0.1,24), MAT.blue)); dial.rotation.x = Math.PI/2; dial.position.y = 2.1;
+    const face = new T.Mesh(new T.CircleGeometry(0.22, 24), MAT.white); face.position.set(0, 2.1, 0.06); g.add(face);
+    const face2 = face.clone(); face2.rotation.y = Math.PI; face2.position.z = -0.06; g.add(face2);
+    const rod = new T.Mesh(new T.CylinderGeometry(0.006,0.006,0.6,6), MAT.steel); rod.position.y = 1.5; g.add(rod);
+    const pan = body(new T.Mesh(new T.CylinderGeometry(0.3, 0.2, 0.08, 20, 1, true), MAT.steel)); pan.position.y = 1.2; pan.material.side = T.DoubleSide;
+  }
+  // sections
+  const bedDefs = bedsFor(f);
+  bedDefs.forEach((b, i) => {
+    const sec = f.sections[i] || {produce:null};
+    const sg = new T.Group(); sg.position.set(b.x, b.y, b.z); sg.rotation.x = b.tilt; g.add(sg);
+    const bedMesh = new T.Mesh(new T.BoxGeometry(Math.max(0.05,b.sw-0.05), 0.04, Math.max(0.05,b.sd-0.05)), MAT.bed);
+    bedMesh.receiveShadow = true; sg.add(bedMesh); beds.set(i, bedMesh);
+    const pickBox = new T.Mesh(new T.BoxGeometry(Math.max(0.05,b.sw-0.05), 0.3, Math.max(0.05,b.sd-0.05)), MAT.pick);
+    pickBox.position.y = 0.15; pickBox.userData = {fixtureId:f.id, sectionIndex:i, isSection:true}; sg.add(pickBox); pick.push(pickBox);
+    const p = sec.produce && PRODUCE[sec.produce];
+    if (p){
+      const inst = makeProduce(p, b.sw-0.08, b.sd-0.08, b.inside ? 0.16 : 0);
+      if (inst){ sg.add(inst); }
+      {
+        const spr = new T.Sprite(new T.SpriteMaterial({map: labelTex(p.name, sec.price||'', sec.unit||p.unit), depthTest:true, depthWrite:false}));
+        const lw = Math.min(0.62, Math.max(0.42, b.sw*0.55)); spr.scale.set(lw, lw*0.625, 1);
+        spr.position.set(b.x, b.y + b.up + (b.inside? 0.05 : 0), b.z + (b.front ? b.sd/2 : -b.sd/2) + (b.front? 0.02 : -0.02));
+        spr.renderOrder = 2; g.add(spr);
+      }
+    }
+  });
+  g.position.set(f.x, 0, f.z); g.rotation.y = T.MathUtils.degToRad(f.rot||0);
+  return {group:g, pick, beds};
+}
+
+const _m = new T.Matrix4(), _p = new T.Vector3(), _q = new T.Quaternion(), _s = new T.Vector3(), _e = new T.Euler(), _c = new T.Color();
+function makeProduce(p, sw, sd, maxH){
+  if (sw <= 0.05 || sd <= 0.05) return null;
+  const s = p.size;
+  let cols, rows, layers = 1, geo, dx, dz, h;
+  if (p.shape === 'long'){
+    const L = p.id==='banana' ? s*3.2 : (p.id==='celery'||p.id==='leek'||p.id==='rhubarb'||p.id==='spring_onion'||p.id==='eshallot'||p.id==='snake_beans'||p.id==='lemongrass') ? s*5 : s*2.6;
+    dx = L*1.05; dz = s*1.05; h = s; geo = GEO.long;
+    cols = Math.max(1, Math.floor(sw/dx)); rows = Math.max(1, Math.floor(sd/dz));
+    if (s < 0.03) layers = 3; else layers = 2;
+    var lenScale = L;
+  } else if (p.shape === 'box'){
+    dx = s*1.08; dz = s*1.08; h = s*0.55; geo = GEO.box;
+    cols = Math.max(1, Math.floor(sw/dx)); rows = Math.max(1, Math.floor(sd/dz));
+    layers = s < 0.2 ? 2 : 1;
+  } else if (p.shape === 'leaf'){
+    dx = s*0.95; dz = s*0.95; h = s*0.7; geo = GEO.leaf;
+    cols = Math.max(1, Math.floor(sw/dx)); rows = Math.max(1, Math.floor(sd/dz));
+  } else { // sphere / big
+    dx = s*0.98; dz = s*0.98; h = s; geo = p.shape==='big' ? GEO.big : GEO.sphere;
+    cols = Math.max(1, Math.floor(sw/dx)); rows = Math.max(1, Math.floor(sd/dz));
+    layers = s < 0.1 ? 2 : 1;
+  }
+  if (maxH && h*layers > maxH) layers = Math.max(1, Math.floor(maxH/h));
+  let total = cols*rows*layers;
+  const CAP = 700; let stride = 1;
+  if (total > CAP){ stride = Math.ceil(total/CAP); }
+  const items = [];
+  for (let l=0;l<layers;l++){
+    const shrink = l===0 ? 1 : (1 - l*0.28);
+    const c2 = Math.max(1, Math.round(cols*shrink)), r2 = Math.max(1, Math.round(rows*shrink));
+    for (let r=0;r<r2;r++) for (let c=0;c<c2;c++){
+      if (((r*c2+c) % stride) !== 0) continue;
+      items.push([(-c2/2 + c + .5)*dx + (p.shape==='box'?0:rnd(-.15,.15)*dx), 0.02 + h/2 + l*h*0.82, (-r2/2 + r + .5)*dz + (p.shape==='box'?0:rnd(-.15,.15)*dz), l]);
+    }
+  }
+  const mat = new T.MeshStandardMaterial({color: new T.Color(p.color), roughness: p.shape==='box' ? .85 : .55});
+  const im = new T.InstancedMesh(geo, mat, items.length);
+  im.castShadow = true; im.receiveShadow = true;
+  const base = new T.Color(p.color);
+  items.forEach((it, i) => {
+    _p.set(it[0], it[1], it[2]);
+    if (p.shape === 'long'){ _e.set(0, rnd(-.12,.12) + (p.id==='corn'||p.id==='celery' ? 0 : 0), Math.PI/2); _q.setFromEuler(_e); _s.set(s, lenScale, s); }
+    else if (p.shape === 'box'){ _e.set(0, 0, 0); _q.setFromEuler(_e); _s.set(s, s, s*0.85); }
+    else if (p.shape === 'leaf'){ _e.set(rnd(-.2,.2), rnd(0,6.28), rnd(-.2,.2)); _q.setFromEuler(_e); _s.set(s, s*0.7, s); }
+    else { _e.set(0, rnd(0,6.28), 0); _q.setFromEuler(_e); _s.set(s, s, s); }
+    _m.compose(_p, _q, _s); im.setMatrixAt(i, _m);
+    _c.copy(base).offsetHSL(rnd(-.015,.015), rnd(-.05,.05), rnd(-.06,.06)); im.setColorAt(i, _c);
+  });
+  im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true;
+  return im;
+}
+
+function disposeGroup(g){ g.traverse(o => { if (o.geometry && !Object.values(GEO).includes(o.geometry)) o.geometry.dispose(); if (o.material && !Object.values(MAT).includes(o.material)){ if (o.material.map && o.material.map !== TEX.timber && !labelCache.has(o.material.map)) {} o.material.dispose(); } }); }
+function rebuildFixture(id){
+  const old = built.get(id); if (old){ fixGroup.remove(old.group); disposeGroup(old.group); built.delete(id); }
+  const f = fixtureById(id); if (!f) { rebuildPickables(); return; }
+  const b = buildFixture(f); fixGroup.add(b.group); built.set(id, b); rebuildPickables(); refreshHighlights();
+}
+function rebuildAll(){
+  built.forEach(b => { fixGroup.remove(b.group); disposeGroup(b.group); }); built.clear();
+  buildRoom();
+  layout.fixtures.forEach(f => { const b = buildFixture(f); fixGroup.add(b.group); built.set(f.id, b); });
+  rebuildPickables(); refreshHighlights(); renderFixList(); renderInspector(); updateStatus();
+}
+
+/* selection highlight */
+const selBox = new T.LineSegments(new T.EdgesGeometry(GEO.unit), new T.LineBasicMaterial({color:0xC8202F, linewidth:2}));
+selBox.visible = false; scene.add(selBox);
+let hoverSection = null; // {fid, idx}
+function refreshHighlights(){
+  built.forEach((b, fid) => b.beds.forEach((m, idx) => {
+    m.material = (selectedSection && selectedSection.fid===fid && selectedSection.idx===idx) ? MAT.bedSel : (hoverSection && hoverSection.fid===fid && hoverSection.idx===idx) ? MAT.bedHover : MAT.bed;
+  }));
+  const f = selectedFixture && fixtureById(selectedFixture);
+  if (f){
+    const b = built.get(f.id); if (b){ const box = new T.Box3().setFromObject(b.group); const sz = new T.Vector3(); box.getSize(sz); const ce = new T.Vector3(); box.getCenter(ce);
+      selBox.position.copy(ce); selBox.scale.set(sz.x+0.06, sz.y+0.06, sz.z+0.06); selBox.visible = true; }
+  } else selBox.visible = false;
+}
+
+/* ───────────── Interaction ───────────── */
+const ray = new T.Raycaster();
+const floorPlane = new T.Plane(new T.Vector3(0,1,0), 0);
+const ndc = new T.Vector2();
+function setNdc(e){ const r = canvas.getBoundingClientRect(); ndc.set(((e.clientX - r.left)/r.width)*2-1, -((e.clientY - r.top)/r.height)*2+1); }
+function pickAt(e){
+  setNdc(e); ray.setFromCamera(ndc, camera);
+  const hits = ray.intersectObjects(pickables, false);
+  for (const h of hits){ const u = h.object.userData; if (u.isSection || u.isBody || u.isFloor) return h; }
+  return null;
+}
+function floorPoint(e, out){ setNdc(e); ray.setFromCamera(ndc, camera); return ray.ray.intersectPlane(floorPlane, out); }
+
+let drag = null; // {mode, start:{x,y}, moved, ...}
+const ghost = $('#ghost');
+const pointers = new Map();
+let pinch = null;
+
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+canvas.addEventListener('pointerdown', e => {
+  canvas.focus();
+  pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+  if (pointers.size === 2){ const [a,b] = [...pointers.values()]; pinch = {d: Math.hypot(a.x-b.x, a.y-b.y), cx:(a.x+b.x)/2, cy:(a.y+b.y)/2, dist: cam.dist}; drag = null; ghost.style.display='none'; return; }
+  canvas.setPointerCapture(e.pointerId);
+  const hit = pickAt(e);
+  const start = {x:e.clientX, y:e.clientY};
+  if (e.button === 2 || e.button === 1 || e.shiftKey || (hit && hit.object.userData.isFloor && e.altKey)){
+    drag = {mode:'pan', start, moved:false, last:{x:e.clientX,y:e.clientY}}; return;
+  }
+  if (hit && hit.object.userData.isSection){
+    const u = hit.object.userData; const f = fixtureById(u.fixtureId); const sec = f && f.sections[u.sectionIndex];
+    drag = {mode:'section', start, moved:false, fid:u.fixtureId, idx:u.sectionIndex, has: !!(sec && sec.produce)};
+  } else if (hit && hit.object.userData.isBody){
+    const f = fixtureById(hit.object.userData.fixtureId); const fp = new T.Vector3(); floorPoint(e, fp);
+    drag = {mode:'fixture', start, moved:false, fid:f.id, offX: f.x - fp.x, offZ: f.z - fp.z};
+  } else {
+    drag = {mode: viewMode==='top' ? 'pan' : 'orbit', start, moved:false, last:{x:e.clientX,y:e.clientY}};
+  }
+});
+canvas.addEventListener('pointermove', e => {
+  if (pointers.has(e.pointerId)) pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+  if (pinch && pointers.size === 2){
+    const [a,b] = [...pointers.values()]; const d = Math.hypot(a.x-b.x, a.y-b.y); const cx=(a.x+b.x)/2, cy=(a.y+b.y)/2;
+    cam.dist = T.MathUtils.clamp(pinch.dist * (pinch.d/d), 3, 80);
+    panBy(cx - pinch.cx, cy - pinch.cy); pinch.cx = cx; pinch.cy = cy; applyCamera(); return;
+  }
+  if (!drag) { // hover
+    if (viewMode!=='top' || true){ const hit = pickAt(e); const u = hit && hit.object.userData; const hs = (u && u.isSection) ? {fid:u.fixtureId, idx:u.sectionIndex} : null;
+      if ((hs&&!hoverSection)||(!hs&&hoverSection)||(hs&&hoverSection&&(hs.fid!==hoverSection.fid||hs.idx!==hoverSection.idx))){ hoverSection = hs; refreshHighlights(); }
+      canvas.style.cursor = u && (u.isSection||u.isBody) ? 'pointer' : 'grab'; }
+    return;
+  }
+  const dx = e.clientX - drag.start.x, dy = e.clientY - drag.start.y;
+  if (!drag.moved && Math.hypot(dx,dy) < 4) return;
+  if (!drag.moved){ drag.moved = true; if (drag.mode==='section' && !drag.has){ drag.mode='orbit'; drag.last={x:e.clientX,y:e.clientY}; } if (drag.mode==='fixture'){ selectFixture(drag.fid, true); } }
+  if (drag.mode === 'orbit'){
+    cam.theta -= (e.clientX - drag.last.x) * 0.006; cam.phi = T.MathUtils.clamp(cam.phi - (e.clientY - drag.last.y)*0.005, 0.15, 1.5);
+    drag.last = {x:e.clientX,y:e.clientY}; applyCamera();
+  } else if (drag.mode === 'pan'){
+    panBy(e.clientX - drag.last.x, e.clientY - drag.last.y); drag.last = {x:e.clientX,y:e.clientY}; applyCamera();
+  } else if (drag.mode === 'fixture'){
+    const fp = new T.Vector3(); if (!floorPoint(e, fp)) return;
+    const f = fixtureById(drag.fid); if (!f) return;
+    const snap = v => Math.round(v*4)/4;
+    f.x = T.MathUtils.clamp(snap(fp.x + drag.offX), 0.3, layout.room.w-0.3); f.z = T.MathUtils.clamp(snap(fp.z + drag.offZ), 0.3, layout.room.d-0.3);
+    const b = built.get(f.id); if (b){ b.group.position.set(f.x, 0, f.z); } refreshHighlights(); renderInspector(); autosave(); canvas.style.cursor='grabbing';
+  } else if (drag.mode === 'section'){
+    const f = fixtureById(drag.fid); const sec = f.sections[drag.idx]; const p = PRODUCE[sec.produce];
+    ghost.textContent = p ? p.name : ''; ghost.style.display = 'block';
+    const r = canvas.getBoundingClientRect(); ghost.style.left = (e.clientX - r.left) + 'px'; ghost.style.top = (e.clientY - r.top) + 'px';
+    const hit = pickAt(e); const u = hit && hit.object.userData;
+    hoverSection = (u && u.isSection && !(u.fixtureId===drag.fid && u.sectionIndex===drag.idx)) ? {fid:u.fixtureId, idx:u.sectionIndex} : null; refreshHighlights();
+    canvas.style.cursor = 'grabbing';
+  }
+});
+function endPointer(e){
+  pointers.delete(e.pointerId);
+  if (pointers.size < 2) pinch = null;
+  if (!drag) return;
+  const d = drag; drag = null; ghost.style.display='none'; canvas.style.cursor='grab';
+  if (!d.moved){
+    if (d.mode === 'section'){ selectSection(d.fid, d.idx); }
+    else if (d.mode === 'fixture'){ selectFixture(d.fid); }
+    else if (d.mode === 'orbit' || d.mode === 'pan'){ if (e.type==='pointerup' && e.button===0){ selectedFixture = null; selectedSection = null; refreshHighlights(); renderInspector(); renderFixList(); updateStatus(); } }
+    return;
+  }
+  if (d.mode === 'section' && hoverSection){
+    const a = fixtureById(d.fid), b = fixtureById(hoverSection.fid);
+    const t = a.sections[d.idx]; a.sections[d.idx] = b.sections[hoverSection.idx]; b.sections[hoverSection.idx] = t;
+    selectedSection = {fid: hoverSection.fid, idx: hoverSection.idx}; selectedFixture = hoverSection.fid; hoverSection = null;
+    rebuildFixture(a.id); if (b.id !== a.id) rebuildFixture(b.id); renderInspector(); renderFixList(); autosave(); updateStatus();
+  } else if (d.mode === 'fixture'){ autosave(); }
+}
+canvas.addEventListener('pointerup', endPointer);
+canvas.addEventListener('pointercancel', endPointer);
+canvas.addEventListener('wheel', e => { e.preventDefault(); cam.dist = T.MathUtils.clamp(cam.dist * (1 + Math.sign(e.deltaY)*0.09), 3, 80); applyCamera(); }, {passive:false});
+function panBy(px, py){
+  const k = cam.dist / canvas.clientHeight * 1.1;
+  if (viewMode === 'top'){ cam.target.x -= px*k; cam.target.z -= py*k; return; }
+  const right = new T.Vector3(Math.cos(cam.theta), 0, -Math.sin(cam.theta));
+  const fwd = new T.Vector3(-Math.sin(cam.theta), 0, -Math.cos(cam.theta));
+  cam.target.addScaledVector(right, -px*k).addScaledVector(fwd, py*k*1.2);
+  cam.target.x = T.MathUtils.clamp(cam.target.x, -5, layout.room.w+5); cam.target.z = T.MathUtils.clamp(cam.target.z, -5, layout.room.d+5);
+}
+canvas.addEventListener('keydown', e => {
+  const f = selectedFixture && fixtureById(selectedFixture);
+  if (e.key === 'Escape'){ selectedFixture=null; selectedSection=null; refreshHighlights(); renderInspector(); renderFixList(); updateStatus(); }
+  if (!f) return;
+  if (e.key === 'r' || e.key === 'R'){ e.preventDefault(); rotateFixture(f, e.shiftKey ? 90 : 15); }
+  if (e.key === 'Delete' || e.key === 'Backspace'){ e.preventDefault(); deleteFixture(f.id); }
+  if (e.key === 'd' || e.key === 'D'){ e.preventDefault(); duplicateFixture(f.id); }
+  const step = e.shiftKey ? 1 : 0.25;
+  if (e.key === 'ArrowLeft'){ f.x -= step; moveApply(f); } if (e.key === 'ArrowRight'){ f.x += step; moveApply(f); }
+  if (e.key === 'ArrowUp'){ f.z -= step; moveApply(f); } if (e.key === 'ArrowDown'){ f.z += step; moveApply(f); }
+});
+function moveApply(f){ const b = built.get(f.id); if (b) b.group.position.set(f.x,0,f.z); refreshHighlights(); renderInspector(); autosave(); }
+function rotateFixture(f, deg){ f.rot = ((f.rot||0) + deg) % 360; const b = built.get(f.id); if (b) b.group.rotation.y = T.MathUtils.degToRad(f.rot); refreshHighlights(); renderInspector(); autosave(); }
+function deleteFixture(id){ layout.fixtures = layout.fixtures.filter(f => f.id !== id); if (selectedFixture===id){ selectedFixture=null; selectedSection=null; } rebuildFixture(id); renderFixList(); renderInspector(); autosave(); updateStatus(); }
+function duplicateFixture(id){ const f = fixtureById(id); if (!f) return; const c = JSON.parse(JSON.stringify(f)); c.id = nid(); c.x = Math.min(layout.room.w-0.5, c.x + 1); c.z = Math.min(layout.room.d-0.5, c.z + 1); c.name = f.name + ' copy'; layout.fixtures.push(c); rebuildFixture(c.id); selectFixture(c.id); autosave(); }
+function selectFixture(id, keepSection){ selectedFixture = id; if (!keepSection) selectedSection = null; refreshHighlights(); renderInspector(); renderFixList(); updateStatus(); if (window.innerWidth<=980) $('#rightPane').classList.add('open'); }
+function selectSection(fid, idx){ selectedFixture = fid; selectedSection = {fid, idx}; refreshHighlights(); renderInspector(); renderFixList(); updateStatus(); if (window.innerWidth<=980) $('#rightPane').classList.add('open'); }
+
+/* HTML5 drag from catalogue onto beds */
+canvas.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect='copy'; const hit = pickAt(e); const u = hit && hit.object.userData; const hs = (u && u.isSection) ? {fid:u.fixtureId, idx:u.sectionIndex} : null; hoverSection = hs; refreshHighlights(); });
+canvas.addEventListener('dragleave', () => { hoverSection = null; refreshHighlights(); });
+canvas.addEventListener('drop', e => {
+  e.preventDefault(); const pid = e.dataTransfer.getData('text/plain'); const hit = pickAt(e); const u = hit && hit.object.userData; hoverSection = null;
+  if (!(u && u.isSection) || !PRODUCE[pid]) { refreshHighlights(); return; }
+  assignProduce(u.fixtureId, u.sectionIndex, pid);
+});
+function assignProduce(fid, idx, pid){
+  const f = fixtureById(fid); if (!f) return; const p = PRODUCE[pid];
+  f.sections[idx] = pid ? {produce: pid, price: p.price, unit: p.unit} : {produce:null};
+  selectedFixture = fid; selectedSection = {fid, idx}; rebuildFixture(fid); renderInspector(); renderFixList(); autosave(); updateStatus();
+}
+
+/* ───────────── UI: catalogue ───────────── */
+function swatchHtml(p){ return `<span class="sw ${p.shape==='big'?'sphere':p.shape}" style="background:${p.color}"></span>`; }
+function renderCatalog(filter){
+  const q = (filter||'').trim().toLowerCase();
+  const host = $('#catalog'); host.innerHTML = '';
+  CAT.forEach(([cat, items]) => {
+    const list = items.map(i => PRODUCE[i[0]]).filter(p => !q || p.name.toLowerCase().includes(q) || cat.toLowerCase().includes(q));
+    if (!list.length) return;
+    const sec = document.createElement('div'); sec.className='cat';
+    sec.innerHTML = `<h3>${cat}</h3><div class="chips"></div>`;
+    const chips = $('.chips', sec);
+    list.forEach(p => {
+      const b = document.createElement('button'); b.className='chip'; b.draggable = true; b.dataset.pid = p.id;
+      b.title = selectedSection ? `Put ${p.name} on the selected bed` : `Drag onto a bed`;
+      b.innerHTML = `${swatchHtml(p)}<span><span class="nm">${p.name}</span><br><span class="pr">${p.price ? '$'+p.price+' '+p.unit : '—'}</span></span>`;
+      b.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', p.id); e.dataTransfer.effectAllowed='copy'; });
+      b.addEventListener('click', () => { if (selectedSection) assignProduce(selectedSection.fid, selectedSection.idx, p.id); else flashHint('Click a bed in the 3D view first, or drag this card onto one.'); });
+      chips.appendChild(b);
+    });
+    host.appendChild(sec);
+  });
+}
+$('#search').addEventListener('input', e => renderCatalog(e.target.value));
+let hintTimer = 0; const hintDefault = $('#hint').innerHTML;
+function flashHint(msg){ $('#hint').innerHTML = msg; clearTimeout(hintTimer); hintTimer = setTimeout(() => $('#hint').innerHTML = hintDefault, 3500); }
+
+/* tabs */
+$$('.tabs [role=tab]').forEach(t => t.addEventListener('click', () => {
+  $$('.tabs [role=tab]').forEach(x => x.setAttribute('aria-selected', x===t)); $$('.pane').forEach(p => p.classList.toggle('active', p.dataset.pane === t.dataset.tab)); }));
+
+/* fixtures list */
+const TYPE_NAME = {island:'Island table', wallshelf:'Wall shelf', fridge:'Fridge', crates:'Crate stack', boxes:'Box stack', checkout:'Counter', scale:'Hanging scale', stand:'Display stand'};
+function renderFixList(){
+  const host = $('#fixList'); host.innerHTML='';
+  layout.fixtures.forEach(f => { const b = document.createElement('button'); b.className = f.id===selectedFixture ? 'sel' : ''; b.innerHTML = `<span>${esc(f.name)}</span><span class="t">${TYPE_NAME[f.type]||f.type}</span>`; b.addEventListener('click', () => { selectFixture(f.id); focusFixture(f); }); host.appendChild(b); });
+}
+function focusFixture(f){ cam.target.set(f.x, 0.6, f.z); if (cam.dist > 14) cam.dist = 12; applyCamera(); }
+$$('[data-add]').forEach(b => b.addEventListener('click', () => addFixture(b.dataset.add)));
+function addFixture(type){
+  const c = {x: Math.round(cam.target.x*4)/4, z: Math.round(cam.target.z*4)/4};
+  const defs = { island:[4,2.2,1,4], wallshelf:[4,1,2,4], fridge:[2,0.8,3,2], crates:[0.7,0.5,1,1], boxes:[0.7,0.5,1,1], checkout:[2.4,1.2,0,0], scale:[0.6,0.6,0,0], stand:[0.9,0.6,1,1] };
+  const [w,d,rows,cols] = defs[type];
+  const f = fx(type, TYPE_NAME[type], T.MathUtils.clamp(c.x,1,layout.room.w-1), T.MathUtils.clamp(c.z,1,layout.room.d-1), w, d, 0, rows, cols, []);
+  layout.fixtures.push(f); rebuildFixture(f.id); selectFixture(f.id); autosave(); updateStatus();
+}
+$('#resetBtn').addEventListener('click', () => { layout = defaultLayout(); selectedFixture=null; selectedSection=null; loadedLayoutId=''; rebuildAll(); fitView(); autosave(); flashHint('Reset to the layout traced from the photos.'); });
+
+/* ───────────── Inspector ───────────── */
+function esc(s){ return String(s??'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function renderInspector(){
+  const host = $('#insp'); const f = selectedFixture && fixtureById(selectedFixture);
+  if (!f){ host.innerHTML = `<h2>Inspector</h2><p class="empty">Nothing selected. Click a table, shelf or bed of produce in the shop.</p>
+    <h3>Room</h3><div class="kv"><label>Width</label><span>${layout.room.w} m</span><label>Depth</label><span>${layout.room.d} m</span><label>Fixtures</label><span>${layout.fixtures.length}</span></div>`; return; }
+  const hasSections = (f.rows|0) > 0;
+  let secHtml = '';
+  if (hasSections){
+    const rowsOrder = [...Array(f.rows).keys()].reverse(); // back/top rows first so it reads like a plan
+    secHtml = `<h3>Beds <span style="font-weight:500;text-transform:none;letter-spacing:0">(click one, then pick produce)</span></h3>`;
+    rowsOrder.forEach(r => {
+      const lab = f.type==='island' ? (f.rows===1 ? 'Top' : (r===0 ? 'Front side' : 'Back side')) : (f.type==='wallshelf' || f.type==='fridge') ? `Tier ${r+1}${r===f.rows-1?' (top)':''}` : 'Top';
+      secHtml += `<div class="rowLabel">${lab}</div><div class="secGrid" style="grid-template-columns:repeat(${f.cols},1fr)">`;
+      for (let c=0;c<f.cols;c++){ const i = r*f.cols+c; const s = f.sections[i]||{}; const p = s.produce && PRODUCE[s.produce]; const sel = selectedSection && selectedSection.idx===i;
+        secHtml += `<button class="secCell ${sel?'sel':''} ${p?'':'empty'}" data-sec="${i}" title="${p?esc(p.name):'Empty bed'}">${p?`<span class="sw" style="background:${p.color}"></span>`:''}<span>${p?esc(p.name):'Empty'}</span></button>`; }
+      secHtml += `</div>`;
+    });
+  }
+  let cardHtml = '';
+  if (selectedSection && f.sections[selectedSection.idx]){
+    const s = f.sections[selectedSection.idx]; const p = s.produce && PRODUCE[s.produce];
+    const opts = ['<option value="">— Empty —</option>'].concat(CAT.map(([cat, items]) => `<optgroup label="${cat}">` + items.map(i => `<option value="${i[0]}" ${s.produce===i[0]?'selected':''}>${esc(i[1])}</option>`).join('') + '</optgroup>')).join('');
+    cardHtml = `<h3>Selected bed</h3>
+      <select id="secProduce" aria-label="Produce">${opts}</select>
+      ${p ? `<div class="row"><label style="color:var(--muted)">Price $</label><input id="secPrice" type="text" inputmode="decimal" value="${esc(s.price||'')}" style="width:5.5em;font-variant-numeric:tabular-nums">
+      <select id="secUnit" aria-label="Unit">${['kg','ea','bnch','pnt','doz','bag'].map(u => `<option ${((s.unit||p.unit)===u)?'selected':''}>${u}</option>`).join('')}</select>
+      <button id="secClear" class="ghost" title="Empty this bed">Clear</button></div>
+      <div class="priceCard"><span class="top">Wagga Fruit Supply · Australian grown</span><span class="nm">${esc(p.name)}</span><span class="pr">$ ${esc(s.price||'')}<small>${esc((s.unit||p.unit).toUpperCase())}</small></span></div>` : ''}`;
+  }
+  host.innerHTML = `<h2>${esc(f.name)}</h2>
+    <div class="kv">
+      <label for="fName">Name</label><input id="fName" type="text" value="${esc(f.name)}">
+      <label>Type</label><span>${TYPE_NAME[f.type]||f.type}</span>
+      <label for="fW">Length</label><div class="row"><input id="fW" type="number" step="0.1" min="0.3" max="20" value="${f.w}"> <span class="note">m</span></div>
+      <label for="fD">Depth</label><div class="row"><input id="fD" type="number" step="0.1" min="0.3" max="6" value="${f.d}"> <span class="note">m</span></div>
+      <label>Position</label><span style="font-variant-numeric:tabular-nums">${f.x.toFixed(2)} m, ${f.z.toFixed(2)} m</span>
+      <label>Rotation</label><div class="row"><span style="font-variant-numeric:tabular-nums;min-width:3em">${Math.round(f.rot||0)}°</span><button data-rot="-15">−15°</button><button data-rot="15">+15°</button><button data-rot="90">+90°</button></div>
+      ${hasSections ? `<label for="fRows">${f.type==='island'?'Sides':'Tiers'}</label><input id="fRows" type="number" min="1" max="${f.type==='island'?2:4}" value="${f.rows}">
+      <label for="fCols">Beds along</label><input id="fCols" type="number" min="1" max="16" value="${f.cols}">` : ''}
+    </div>
+    ${secHtml}${cardHtml}
+    <h3>Actions</h3>
+    <div class="row"><button id="fDup">Duplicate</button><button id="fFocus">Look at</button><button id="fDel" class="danger">Remove</button></div>`;
+  $('#fName').addEventListener('change', e => { f.name = e.target.value || TYPE_NAME[f.type]; renderFixList(); host.querySelector('h2').textContent = f.name; autosave(); });
+  const dim = (id, key, min, max) => $(id).addEventListener('change', e => { f[key] = T.MathUtils.clamp(parseFloat(e.target.value)||f[key], min, max); rebuildFixture(f.id); renderInspector(); autosave(); });
+  dim('#fW','w',0.3,20); dim('#fD','d',0.3,6);
+  $$('[data-rot]', host).forEach(b => b.addEventListener('click', () => rotateFixture(f, parseInt(b.dataset.rot))));
+  if (hasSections){
+    const regrid = () => { const rows = T.MathUtils.clamp(parseInt($('#fRows').value)||1, 1, f.type==='island'?2:4), cols = T.MathUtils.clamp(parseInt($('#fCols').value)||1, 1, 16);
+      const old = f.sections, oc = f.cols, or = f.rows; const ns = [];
+      for (let r=0;r<rows;r++) for (let c=0;c<cols;c++){ ns.push((r<or && c<oc && old[r*oc+c]) ? old[r*oc+c] : {produce:null}); }
+      f.rows = rows; f.cols = cols; f.sections = ns; if (selectedSection && selectedSection.idx >= ns.length) selectedSection = null; rebuildFixture(f.id); renderInspector(); autosave(); };
+    $('#fRows').addEventListener('change', regrid); $('#fCols').addEventListener('change', regrid);
+    $$('[data-sec]', host).forEach(b => b.addEventListener('click', () => selectSection(f.id, parseInt(b.dataset.sec))));
+  }
+  if (selectedSection && f.sections[selectedSection.idx]){
+    const s = f.sections[selectedSection.idx];
+    $('#secProduce').addEventListener('change', e => assignProduce(f.id, selectedSection.idx, e.target.value || null));
+    const pr = $('#secPrice'), un = $('#secUnit'), cl = $('#secClear');
+    if (pr){ pr.addEventListener('change', e => { s.price = e.target.value.replace(/[^0-9.]/g,''); rebuildFixture(f.id); renderInspector(); autosave(); }); }
+    if (un){ un.addEventListener('change', e => { s.unit = e.target.value; rebuildFixture(f.id); renderInspector(); autosave(); }); }
+    if (cl){ cl.addEventListener('click', () => assignProduce(f.id, selectedSection.idx, null)); }
+  }
+  $('#fDup').addEventListener('click', () => duplicateFixture(f.id));
+  $('#fFocus').addEventListener('click', () => focusFixture(f));
+  $('#fDel').addEventListener('click', () => { if ($('#fDel').dataset.armed){ deleteFixture(f.id); } else { $('#fDel').dataset.armed='1'; $('#fDel').textContent='Confirm remove'; setTimeout(()=>{ const b=$('#fDel'); if(b){ delete b.dataset.armed; b.textContent='Remove'; } }, 2500); } });
+}
+$('#inspBtn').addEventListener('click', () => $('#rightPane').classList.toggle('open'));
+if (window.innerWidth <= 980) $('#inspBtn').style.display = '';
+
+/* ───────────── View controls ───────────── */
+function setView(m){ viewMode = m; $('#v3d').setAttribute('aria-pressed', m==='3d'); $('#vtop').setAttribute('aria-pressed', m==='top'); if (m==='top'){ cam.dist = Math.max(cam.dist, 10); } applyCamera(); }
+$('#v3d').addEventListener('click', () => setView('3d'));
+$('#vtop').addEventListener('click', () => setView('top'));
+$('#fitBtn').addEventListener('click', fitView);
+
+/* ───────────── Status ───────────── */
+function updateStatus(){
+  const beds = layout.fixtures.reduce((n,f) => n + f.sections.filter(s => s.produce).length, 0);
+  $('#stCount').textContent = `${layout.fixtures.length} fixtures · ${beds} beds stocked`;
+  const f = selectedFixture && fixtureById(selectedFixture);
+  $('#stSel').textContent = f ? `Selected: ${f.name}${selectedSection ? ' · bed ' + (selectedSection.idx+1) : ''}` : '';
+}
+
+/* ───────────── Export / import ───────────── */
+$('#ioBtn').addEventListener('click', () => { const io = $('#io'); io.classList.toggle('open'); $('#ioText').value = JSON.stringify(layout); if (window.innerWidth<=980) $('#rightPane').classList.add('open'); });
+$('#ioClose').addEventListener('click', () => $('#io').classList.remove('open'));
+$('#copyBtn').addEventListener('click', async () => { $('#ioText').value = JSON.stringify(layout); try { await navigator.clipboard.writeText($('#ioText').value); flashHint('Layout text copied.'); } catch(e){ $('#ioText').select(); flashHint('Select the text and copy it.'); } });
+$('#applyBtn').addEventListener('click', () => { try { const j = JSON.parse($('#ioText').value); if (!j || !Array.isArray(j.fixtures)) throw 0; applyLayout(j); flashHint('Pasted layout applied.'); } catch(e){ flashHint('That text is not a layout from this planner.'); } });
+function applyLayout(j){
+  layout = { room: j.room || JSON.parse(JSON.stringify(ROOM)), fixtures: j.fixtures.map(f => Object.assign({rot:0, rows:0, cols:0, sections:[]}, f)) };
+  layout.fixtures.forEach(f => { if (!f.id) f.id = nid(); const n = (f.rows|0)*(f.cols|0); while (f.sections.length < n) f.sections.push({produce:null}); f.sections.length = n; f.sections = f.sections.map(s => (s && typeof s==='object') ? s : {produce:null}); });
+  selectedFixture = null; selectedSection = null; rebuildAll(); autosave();
+}
+
+/* ───────────── Shared layouts (artifact db) ───────────── */
+let db = null; let dbDocs = [];
+const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,60) || 'layout';
+function renderLayoutSel(){
+  const sel = $('#layoutSel'); const cur = sel.value; sel.innerHTML = '<option value="">' + (db ? (dbDocs.length ? 'Saved layouts…' : 'No saved layouts yet') : 'Saved layouts (this browser)') + '</option>';
+  dbDocs.forEach(d => { const o = document.createElement('option'); o.value = d.id; const dt = d.updatedAt ? new Date(d.updatedAt) : null; o.textContent = d.name + (dt ? ` · ${dt.toLocaleDateString(undefined,{day:'numeric',month:'short'})}` : ''); sel.appendChild(o); });
+  sel.value = dbDocs.some(d => d.id===cur) ? cur : (dbDocs.some(d => d.id===loadedLayoutId) ? loadedLayoutId : '');
+  $('#loadBtn').disabled = $('#delBtn').disabled = !sel.value;
+}
+$('#layoutSel').addEventListener('change', () => { $('#loadBtn').disabled = $('#delBtn').disabled = !$('#layoutSel').value; const d = dbDocs.find(x => x.id===$('#layoutSel').value); if (d) $('#layoutName').value = d.name; });
+const LOCAL_LAYOUTS = 'wfs-planner-layouts-v1';
+function localDocs(){ try { return JSON.parse(localStorage.getItem(LOCAL_LAYOUTS)||'[]'); } catch(e){ return []; } }
+function setLocalDocs(d){ try { localStorage.setItem(LOCAL_LAYOUTS, JSON.stringify(d)); } catch(e){} }
+async function saveLayout(){
+  const name = $('#layoutName').value.trim(); if (!name){ $('#layoutName').focus(); flashHint('Give the layout a name first.'); return; }
+  const id = slug(name); const doc = {name, updatedAt: Date.now(), json: JSON.stringify(layout)};
+  if (db){ try { await db.doc('layouts/' + id).set(doc); loadedLayoutId = id; flashHint(`Saved “${name}” for everyone.`); } catch(e){ flashHint('Could not save: ' + (e && e.message || 'try again')); return; } }
+  else { const d = localDocs().filter(x => x.id!==id); d.unshift(Object.assign({id}, doc)); setLocalDocs(d); dbDocs = d; loadedLayoutId = id; renderLayoutSel(); flashHint(`Saved “${name}” in this browser.`); }
+}
+$('#saveBtn').addEventListener('click', saveLayout);
+$('#loadBtn').addEventListener('click', () => { const d = dbDocs.find(x => x.id===$('#layoutSel').value); if (!d) return; try { applyLayout(JSON.parse(d.json)); loadedLayoutId = d.id; $('#layoutName').value = d.name; flashHint(`Loaded “${d.name}”.`); } catch(e){ flashHint('That saved layout could not be read.'); } });
+$('#delBtn').addEventListener('click', async () => {
+  const id = $('#layoutSel').value; const d = dbDocs.find(x => x.id===id); if (!d) return;
+  const b = $('#delBtn'); if (!b.dataset.armed){ b.dataset.armed='1'; b.textContent='Confirm delete'; setTimeout(()=>{ delete b.dataset.armed; b.textContent='Delete'; }, 2500); return; }
+  delete b.dataset.armed; b.textContent='Delete';
+  if (db){ try { await db.doc('layouts/'+id).delete(); } catch(e){ flashHint('Could not delete.'); return; } }
+  else { dbDocs = localDocs().filter(x => x.id!==id); setLocalDocs(dbDocs); renderLayoutSel(); }
+  if (loadedLayoutId===id) loadedLayoutId=''; flashHint(`Deleted “${d.name}”.`);
+});
+async function initDb(){
+  try { db = window.claude && window.claude.use ? await window.claude.use('db') : null; } catch(e){ db = null; }
+  if (!db){ dbDocs = localDocs(); renderLayoutSel(); return; }
+  $('#stStore').innerHTML = '<span class="dot"></span>Saved layouts are shared with the team';
+  db.collection('layouts').orderBy('updatedAt','desc').limit(100).onSnapshot(snap => {
+    dbDocs = snap.docs.filter(d => d.exists).map(d => Object.assign({id:d.id}, d.data())); renderLayoutSel();
+  }, err => { flashHint('Shared layouts unavailable right now.'); });
+}
+
+/* ───────────── Render loop & resize ───────────── */
+function resize(){ const w = canvas.clientWidth, h = canvas.clientHeight; if (!w || !h) return; renderer.setSize(w, h, false); camera.aspect = w/h; camera.updateProjectionMatrix(); }
+new ResizeObserver(resize).observe(canvas.parentElement);
+function frame(){ renderer.render(scene, camera); requestAnimationFrame(frame); }
+const themeMq = window.matchMedia('(prefers-color-scheme: dark)');
+function applyTheme(){ renderer.setClearColor(stageColor()); if (roomGroup.children[1]) roomGroup.children[1].material.color.copy(stageColor()); }
+themeMq.addEventListener && themeMq.addEventListener('change', applyTheme);
+new MutationObserver(applyTheme).observe(document.documentElement, {attributes:true, attributeFilter:['data-theme']});
+
+/* ───────────── Boot ───────────── */
+renderCatalog('');
+renderLayoutSel();
+rebuildAll();
+resize(); fitView(); applyTheme();
+frame();
+initDb();
+document.fonts && document.fonts.ready.then(() => { labelCache.clear(); TEX.sign = makeSignTex(); rebuildAll(); });
+})();
+</script>
