@@ -1,3 +1,10 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#C8202F">
+<meta name="robots" content="noindex">
 <title>Wagga Fruit Supply Floor Planner</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
@@ -84,8 +91,15 @@
   .hint b{color:var(--ink);font-weight:600}
   .ghost{position:absolute;pointer-events:none;display:none;transform:translate(-50%,-120%);background:var(--card);color:#1E211D;border:2px solid #C8202F;border-radius:3px;padding:4px 10px;font-family:"Barlow Condensed",sans-serif;font-weight:700;text-transform:uppercase;font-size:14px;box-shadow:var(--shadow);z-index:5}
   .viewBtns{position:absolute;right:12px;top:10px;display:flex;gap:6px}
+  .ctlPad{position:absolute;right:12px;bottom:12px;display:grid;grid-template-columns:44px 44px;gap:6px}
+  .ctlPad button{width:44px;height:44px;padding:0;border-radius:50%;font-size:20px;line-height:1;background:color-mix(in srgb,var(--panel) 92%,transparent);box-shadow:var(--shadow)}
+  .fixPad{position:absolute;left:50%;transform:translateX(-50%);bottom:64px;display:flex;gap:6px;align-items:center;background:color-mix(in srgb,var(--panel) 94%,transparent);border:1px solid var(--accent);border-radius:24px;padding:5px 8px;box-shadow:var(--shadow);max-width:calc(100% - 130px);flex-wrap:wrap;justify-content:center}
+  .fixPad .fixName{font-family:"Barlow Condensed",sans-serif;font-weight:700;text-transform:uppercase;font-size:14px;color:var(--accent);padding:0 6px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .fixPad button{min-height:34px;border-radius:17px}
   .viewBtns button{background:color-mix(in srgb,var(--panel) 92%,transparent)}
   .insp{padding:12px;display:flex;flex-direction:column;gap:12px}
+  .inspClose{display:none;margin:8px 8px 0 auto}
+  @media (max-width: 980px){ .inspClose{display:inline-block} }
   .insp h2{margin:0;font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:20px;text-transform:uppercase;letter-spacing:.03em}
   .insp h3{margin:0;font-family:"Barlow Condensed",sans-serif;font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
   .insp .empty{color:var(--muted);line-height:1.5}
@@ -115,11 +129,24 @@
     .app{grid-template-columns:1fr;grid-template-rows:auto 1fr auto auto;grid-template-areas:"top" "stage" "left" "foot"}
     aside.right{position:absolute;right:0;top:0;bottom:0;width:min(290px,85vw);z-index:6;box-shadow:var(--shadow);display:none}
     aside.right.open{display:flex}
-    aside.left{max-height:34vh}
+    .app{grid-template-columns:minmax(0,1fr)}
+    header.top{flex-wrap:wrap}
+    .saveBar{width:100%;justify-content:flex-start}
+    .stage{min-height:52vh}
+    aside.left{max-height:none;min-height:0}
+    .fixPad{left:8px;transform:none;max-width:calc(100% - 116px);justify-content:flex-start}
+    .hint{display:none}
+    .brand .sub{display:none}
+    header.top{gap:8px;padding:6px 10px}
+    .saveBar input[type=text]{width:130px}
+    .saveBar select{max-width:120px}
+    .fixPad{bottom:12px;max-width:calc(100% - 120px)}
+    .ctlPad{bottom:12px}
   }
   @media (prefers-reduced-motion: reduce){ *{transition:none!important;animation:none!important} }
 </style>
-
+</head>
+<body>
 <div class="app">
   <header class="top">
     <div class="brand"><span class="name">Wagga Fruit Supply</span><span class="sub">Floor planner</span></div>
@@ -171,7 +198,8 @@
       <p class="note"><b>Move a table</b>: click it, then drag it across the floor. It snaps to a 25 cm grid. Press <b>R</b> to turn it 15°, <b>Shift+R</b> for 90°.</p>
       <p class="note"><b>Move produce</b>: drag a bed of produce onto another bed to swap the two. Or drag a produce card from the list straight onto a bed.</p>
       <p class="note"><b>Prices</b>: click a bed and edit the price card on the right. Cards render in the 3D view.</p>
-      <p class="note"><b>Camera</b>: drag empty floor to orbit, scroll to zoom, right-drag or two fingers to pan. Top-down gives a plan view.</p>
+      <p class="note"><b>Camera</b>: drag empty floor to orbit, scroll or pinch to zoom, right-drag or two fingers to pan. The round buttons at the bottom right turn and zoom the view. Top-down gives a plan view.</p>
+      <p class="note"><b>On a phone</b>: tap a table, then use the 15° and 90° buttons that appear to turn it, and Details to change what's on it.</p>
       <p class="note"><b>Save</b>: type a name and Save. Saved layouts are shared with everyone who opens this page. Your working copy also autosaves in this browser.</p>
       <p class="note"><b>Plan underlay</b>: the Plan button lays the architect's drawing on the floor. Top-down view plus Plan is the quickest way to check a table sits where it should.</p>
       <p class="note">Walls, lounges, shelves and gondolas are placed at their drawn dimensions. Two changes from the drawing as built: the entry lounges are split in two, and the grocery gondolas are linked into a snake. Move anything that differs on the day.</p>
@@ -185,11 +213,25 @@
       <button id="planBtn" aria-pressed="false" title="Show the architect's floor plan on the floor">Plan</button>
       <button id="inspBtn" title="Open inspector" style="display:none">Details</button>
     </div>
+    <div class="ctlPad" role="group" aria-label="Camera">
+      <button id="orbL" title="Turn view left">&#8630;</button>
+      <button id="orbR" title="Turn view right">&#8631;</button>
+      <button id="zoomIn" title="Zoom in">+</button>
+      <button id="zoomOut" title="Zoom out">&minus;</button>
+    </div>
+    <div class="fixPad" id="fixPad" hidden role="group" aria-label="Selected fixture">
+      <span class="fixName" id="fixName"></span>
+      <button id="rotL" title="Turn 15° anticlockwise">&#8634; 15°</button>
+      <button id="rotR" title="Turn 15° clockwise">&#8635; 15°</button>
+      <button id="rot90" title="Turn 90°">90°</button>
+      <button id="fixDetails" title="Open details">Details</button>
+    </div>
     <div class="hint" id="hint"><b>Click</b> a table or bed to select it. <b>Drag</b> tables to move, drag beds to swap produce. <b>R</b> rotates. Zoom in to see price cards.</div>
     <div class="ghost" id="ghost"></div>
   </div>
 
   <aside class="right" id="rightPane">
+    <button id="inspClose" class="ghost inspClose" aria-label="Close details">&times; Close</button>
     <div class="insp" id="insp"></div>
     <div class="insp io" id="io">
       <h3>Layout text</h3>
@@ -992,8 +1034,8 @@ function moveApply(f){ const b = built.get(f.id); if (b) b.group.position.set(f.
 function rotateFixture(f, deg){ f.rot = ((f.rot||0) + deg) % 360; const b = built.get(f.id); if (b) b.group.rotation.y = T.MathUtils.degToRad(f.rot); refreshHighlights(); renderInspector(); autosave(); }
 function deleteFixture(id){ layout.fixtures = layout.fixtures.filter(f => f.id !== id); if (selectedFixture===id){ selectedFixture=null; selectedSection=null; } rebuildFixture(id); renderFixList(); renderInspector(); autosave(); updateStatus(); }
 function duplicateFixture(id){ const f = fixtureById(id); if (!f) return; const c = JSON.parse(JSON.stringify(f)); c.id = nid(); c.x = Math.min(layout.room.w-0.5, c.x + 1); c.z = Math.min(layout.room.d-0.5, c.z + 1); c.name = f.name + ' copy'; layout.fixtures.push(c); rebuildFixture(c.id); selectFixture(c.id); autosave(); }
-function selectFixture(id, keepSection){ selectedFixture = id; if (!keepSection) selectedSection = null; refreshHighlights(); renderInspector(); renderFixList(); updateStatus(); if (window.innerWidth<=980) $('#rightPane').classList.add('open'); }
-function selectSection(fid, idx){ selectedFixture = fid; selectedSection = {fid, idx}; refreshHighlights(); renderInspector(); renderFixList(); updateStatus(); if (window.innerWidth<=980) $('#rightPane').classList.add('open'); }
+function selectFixture(id, keepSection){ selectedFixture = id; if (!keepSection) selectedSection = null; refreshHighlights(); renderInspector(); renderFixList(); updateStatus(); }
+function selectSection(fid, idx){ selectedFixture = fid; selectedSection = {fid, idx}; refreshHighlights(); renderInspector(); renderFixList(); updateStatus(); }
 
 /* HTML5 drag from catalogue onto beds */
 canvas.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect='copy'; const hit = pickAt(e); const u = hit && hit.object.userData; const hs = (u && u.isSection) ? {fid:u.fixtureId, idx:u.sectionIndex} : null; hoverSection = hs; refreshHighlights(); });
@@ -1129,6 +1171,7 @@ function renderInspector(){
   $('#fDel').addEventListener('click', () => { if ($('#fDel').dataset.armed){ deleteFixture(f.id); } else { $('#fDel').dataset.armed='1'; $('#fDel').textContent='Confirm remove'; setTimeout(()=>{ const b=$('#fDel'); if(b){ delete b.dataset.armed; b.textContent='Remove'; } }, 2500); } });
 }
 $('#inspBtn').addEventListener('click', () => $('#rightPane').classList.toggle('open'));
+$('#inspClose').addEventListener('click', () => $('#rightPane').classList.remove('open'));
 if (window.innerWidth <= 980) $('#inspBtn').style.display = '';
 
 /* ───────────── View controls ───────────── */
@@ -1137,6 +1180,14 @@ $('#v3d').addEventListener('click', () => setView('3d'));
 $('#vtop').addEventListener('click', () => setView('top'));
 $('#fitBtn').addEventListener('click', fitView);
 $('#planBtn').addEventListener('click', () => setUnderlay(!underlayOn));
+$('#orbL').addEventListener('click', () => { cam.theta += Math.PI/12; applyCamera(); });
+$('#orbR').addEventListener('click', () => { cam.theta -= Math.PI/12; applyCamera(); });
+$('#zoomIn').addEventListener('click', () => { cam.dist = T.MathUtils.clamp(cam.dist*0.8, 3, 80); applyCamera(); });
+$('#zoomOut').addEventListener('click', () => { cam.dist = T.MathUtils.clamp(cam.dist*1.25, 3, 80); applyCamera(); });
+$('#rotL').addEventListener('click', () => { const f = selectedFixture && fixtureById(selectedFixture); if (f) rotateFixture(f, -15); });
+$('#rotR').addEventListener('click', () => { const f = selectedFixture && fixtureById(selectedFixture); if (f) rotateFixture(f, 15); });
+$('#rot90').addEventListener('click', () => { const f = selectedFixture && fixtureById(selectedFixture); if (f) rotateFixture(f, 90); });
+$('#fixDetails').addEventListener('click', () => { $('#rightPane').classList.add('open'); });
 
 /* ───────────── Status ───────────── */
 function updateStatus(){
@@ -1144,6 +1195,7 @@ function updateStatus(){
   $('#stCount').textContent = `${layout.fixtures.length} fixtures · ${beds} beds stocked`;
   const f = selectedFixture && fixtureById(selectedFixture);
   $('#stSel').textContent = f ? `Selected: ${f.name}${selectedSection ? ' · bed ' + (selectedSection.idx+1) : ''}` : '';
+  $('#fixPad').hidden = !f; if (f) $('#fixName').textContent = f.name;
 }
 
 /* ───────────── Export / import ───────────── */
@@ -1219,3 +1271,5 @@ initDb();
 document.fonts && document.fonts.ready.then(() => { labelCache.clear(); TEX.sign = makeSignTex(); rebuildAll(); });
 })();
 </script>
+</body>
+</html>
