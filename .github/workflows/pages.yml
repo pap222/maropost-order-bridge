@@ -1,4 +1,5 @@
-# Publishes the shop floor planner (public/planner) to GitHub Pages.
+# Publishes the shop floor planner (public/planner) to GitHub Pages by
+# copying it onto the gh-pages branch, which GitHub serves automatically.
 # Independent of the Netlify site that serves the order bridge.
 name: Deploy planner to GitHub Pages
 
@@ -11,27 +12,29 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
-  group: pages
+  group: gh-pages
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  publish:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v5
-        with:
-          enablement: true
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: public/planner
-      - id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Copy planner onto gh-pages
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin gh-pages || true
+          git worktree add /tmp/site gh-pages 2>/dev/null || git worktree add --orphan -b gh-pages /tmp/site
+          rm -rf /tmp/site/*
+          cp -r public/planner/. /tmp/site/
+          touch /tmp/site/.nojekyll
+          cd /tmp/site
+          git add -A
+          if git diff --cached --quiet; then echo "No changes to publish"; exit 0; fi
+          git commit -m "Publish planner from ${GITHUB_SHA::7}"
+          git push origin gh-pages
