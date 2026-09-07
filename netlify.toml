@@ -1,5 +1,7 @@
 [build]
   publish = "public"
+  # Static site + functions: there is nothing to compile.
+  command = "echo 'no build step'"
 
 [functions]
   directory = "netlify/functions"
