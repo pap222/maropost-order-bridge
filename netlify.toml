@@ -3,12 +3,6 @@
   # Static site + functions: there is nothing to compile.
   command = "echo 'no build step'"
 
-[build.environment]
-  # The shop planner embeds the architect's floor plan as a base64 image.
-  # Keep Netlify's secrets scanner from misreading that blob as a leaked key.
-  SECRETS_SCAN_OMIT_PATHS = "public/planner/**"
-  SECRETS_SCAN_SMART_DETECTION_OMIT_PATHS = "public/planner/**"
-
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
